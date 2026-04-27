@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
+/* Light-first, stile Apple (grigio canvas + card bianche + accento blu) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ~#F5F5F7 */
+  --app-canvas: 240 6% 97%;
+  --background: 240 6% 97%;
+  --foreground: 240 6% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 9%;
+  --primary: 217 91% 50%;
+  --primary-foreground: 255 255 255;
+  --secondary: 240 5% 97%;
+  --secondary-foreground: 17 18 20;
+  --muted: 240 5% 95%;
+  --muted-foreground: 112 115 120;
+  --accent: 240 5% 95%;
+  --accent-foreground: 17 18 20;
+  --border: 0 0% 92%;
+  --input: 0 0% 94%;
+  --ring: 211 100% 50%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 10 10 10;
+  --sidebar: 255 255 255;
+  --sidebar-foreground: 32 32 32;
+  --sidebar-border: 0 0% 92%;
+  --sidebar-accent: 245 245 250;
+  --sidebar-accent-foreground: 20 20 20;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius: 1rem;
+}
+
+/* manteniamo le variabili .dark se un giorno l’utente le attiva */
+.dark {
+  --app-canvas: 9 9 12;
+  --background: 9 9 12;
+  --foreground: 0 0% 96%;
+  --card: 18 18 20;
+  --card-foreground: 0 0% 95%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 48% 11%;
+  --ring: 211 100% 50%;
+  --sidebar: 9 9 12;
+  --sidebar-foreground: 240 4% 92%;
+  --sidebar-border: 20 20 22;
+  --sidebar-accent: 22 22 26;
+  --sidebar-accent-foreground: 0 0% 95%;
+  --border: 24 24 28;
+  --input: 30 30 35;
+  --popover: 18 18 20;
+  --popover-foreground: 0 0% 95%;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-app-canvas: hsl(var(--app-canvas));
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-2xl: 1.25rem;
+  --shadow: 0 8px 30px rgb(0 0 0 / 0.04);
+  --shadow-soft: 0 8px 30px rgb(0 0 0 / 0.04);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-transparent;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply min-h-svh text-gray-900 antialiased;
+    background:
+      radial-gradient(ellipse 120% 90% at 0% -20%, rgb(255 255 255 / 0.85) 0%, transparent 55%),
+      radial-gradient(ellipse 90% 70% at 100% 0%, rgb(220 230 255 / 0.35) 0%, transparent 50%),
+      radial-gradient(ellipse 80% 50% at 100% 100%, rgb(230 235 245 / 0.5) 0%, transparent 45%),
+      #f5f5f7;
+    background-attachment: fixed;
+    font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text",
+      system-ui, sans-serif;
+  }
 }
