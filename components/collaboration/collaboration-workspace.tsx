@@ -3,6 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { setCollaborationStatus } from "@/lib/actions/collaboration-status";
+import { setCollaborationPaid } from "@/lib/actions/collaboration-payment";
+import {
+  addCollaborationPayment,
+  deleteCollaborationPayment,
+  updateCollaborationPayment,
+} from "@/lib/actions/collaboration-payments";
 import {
   addCollaborationEvent,
   addDeliverable,
@@ -47,11 +53,13 @@ import {
   ArrowLeft,
   Building2,
   CalendarPlus,
+  CheckCircle2,
   Download,
   Euro,
   Loader2,
   Pencil,
   PenLine,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import type { EventType } from "@/lib/collab-event-types";
@@ -71,6 +79,40 @@ const formatEventDate = (iso: string) => {
     return iso;
   }
 };
+
+const URL_RE = /((?:https?:\/\/|www\.)[^\s<>"')\]]+)/gi;
+
+function renderTextWithLinks(text: string | null | undefined) {
+  const src = (text ?? "").trim();
+  if (!src) return "—";
+  const lines = src.split(/\r?\n/);
+  return lines.map((line, lineIdx) => {
+    const parts = line.split(URL_RE);
+    return (
+      <span key={`line-${lineIdx}`}>
+        {parts.map((part, idx) => {
+          if (!part) return null;
+          if (/^(?:https?:\/\/|www\.)/i.test(part)) {
+            const href = part.startsWith("http") ? part : `https://${part}`;
+            return (
+              <a
+                key={`p-${lineIdx}-${idx}`}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700"
+              >
+                {part}
+              </a>
+            );
+          }
+          return <span key={`p-${lineIdx}-${idx}`}>{part}</span>;
+        })}
+        {lineIdx < lines.length - 1 ? <br /> : null}
+      </span>
+    );
+  });
+}
 
 /** Valore per input `datetime-local` in fuso orario locale. */
 function toLocalInputDateTimeValue(d: Date) {
@@ -111,6 +153,17 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
   const [delivError, setDelivError] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<CollaborationEventRow | null>(null);
   const [editCollabOpen, setEditCollabOpen] = useState(false);
+  const [visibleEventsCount, setVisibleEventsCount] = useState(10);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editingPaymentAmount, setEditingPaymentAmount] = useState("");
+  const [editingPaymentDate, setEditingPaymentDate] = useState("");
+  const [editingPaymentNote, setEditingPaymentNote] = useState("");
 
   const flushSaveNotes = useCallback(
     (text: string) => {
@@ -136,6 +189,10 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
   useEffect(() => {
     setStatusLocal(collab.status);
   }, [collab.status]);
+
+  useEffect(() => {
+    setVisibleEventsCount(10);
+  }, [collab.id]);
 
   useEffect(() => {
     if (notesDebounce.current) clearTimeout(notesDebounce.current);
@@ -263,6 +320,9 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
     [collab.brief_text, collab.id]
   );
 
+  const eur = (n: number) =>
+    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+
   return (
     <div className="min-h-0 text-gray-900">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -332,6 +392,64 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                 ))}
               </SelectContent>
             </Select>
+            <div className="mt-1 flex items-center justify-end gap-2">
+              {collab.paid_at ? (
+                <>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                    <CheckCircle2 className="size-3.5" />
+                    Pagata il{" "}
+                    {new Date(collab.paid_at).toLocaleDateString("it-IT", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-full border-gray-200 px-2.5 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      start(() => {
+                        void (async () => {
+                          const r = await setCollaborationPaid(collab.id, false);
+                          if (r.ok) {
+                            router.refresh();
+                          } else if (process.env.NODE_ENV === "development") {
+                            console.error(r.error);
+                          }
+                        })();
+                      });
+                    }}
+                  >
+                    Segna non pagata
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 rounded-full border-gray-200 px-2.5 text-xs"
+                  disabled={pending || !collab.agreed_fee_value}
+                  onClick={() => {
+                    start(() => {
+                      void (async () => {
+                        const r = await setCollaborationPaid(collab.id, true);
+                        if (r.ok) {
+                          router.refresh();
+                        } else if (process.env.NODE_ENV === "development") {
+                          console.error(r.error);
+                        }
+                      })();
+                    });
+                  }}
+                >
+                  Segna pagata
+                </Button>
+              )}
+            </div>
           </div>
         }
       />
@@ -363,9 +481,10 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                   Ancora nessun evento. Registra un’attività qui sotto.
                 </p>
               )}
-                {data.events.map((ev, idx) => {
+                {data.events.slice(0, visibleEventsCount).map((ev, idx) => {
                 const Icon = EVENT_TYPE_ICONS[ev.event_type] ?? EVENT_TYPE_ICONS.nota;
-                const last = idx === data.events.length - 1;
+                const last =
+                  idx === Math.min(data.events.length, visibleEventsCount) - 1;
                 return (
                   <li key={ev.id} className="relative flex gap-3 pb-6 last:pb-0 sm:gap-4">
                     <div className="flex flex-col items-center self-stretch">
@@ -395,8 +514,8 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                                 )?.label ?? ev.event_type}
                               </span>
                             </div>
-                            <p className="mt-1.5 text-sm leading-relaxed text-gray-800">
-                              {ev.description}
+                            <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
+                              {renderTextWithLinks(ev.description)}
                             </p>
                             {ev.attached_file_url && (
                               <a
@@ -428,6 +547,21 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                 );
               })}
             </ul>
+            {data.events.length > visibleEventsCount && (
+              <div className="mt-3 px-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full border-gray-200 px-3"
+                  onClick={() =>
+                    setVisibleEventsCount((n) => Math.min(n + 10, data.events.length))
+                  }
+                >
+                  Carica altri ({data.events.length - visibleEventsCount})
+                </Button>
+              </div>
+            )}
           </div>
 
           <Card>
@@ -629,6 +763,188 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                 >
                   Apri URL contratto archiviato
                 </a>
+              )}
+              {collab.agreed_fee_value != null && (
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Pagamenti registrati</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">
+                    {eur(collab.paid_total)} / {eur(collab.agreed_fee_value)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Residuo: {eur(collab.remaining_due ?? 0)}
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2 rounded-xl border border-gray-100 p-3">
+                <p className="text-xs font-medium text-gray-500">
+                  Registra pagamento (anche parziale)
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="Importo es. 250"
+                    className="h-8"
+                    disabled={pending}
+                  />
+                  <Input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="h-8"
+                    disabled={pending}
+                  />
+                </div>
+                <Input
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Nota (opzionale)"
+                  className="h-8"
+                  disabled={pending}
+                />
+                {paymentError ? <p className="text-xs text-red-600">{paymentError}</p> : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 rounded-full"
+                  disabled={pending || !paymentAmount.trim()}
+                  onClick={() => {
+                    setPaymentError(null);
+                    start(() => {
+                      void (async () => {
+                        const r = await addCollaborationPayment({
+                          collaborationId: collab.id,
+                          amount: paymentAmount,
+                          paidAt: paymentDate,
+                          note: paymentNote,
+                        });
+                        if (!r.ok) {
+                          setPaymentError(r.error);
+                          return;
+                        }
+                        setPaymentAmount("");
+                        setPaymentNote("");
+                        router.refresh();
+                      })();
+                    });
+                  }}
+                >
+                  Aggiungi pagamento
+                </Button>
+              </div>
+              {collab.payments.length > 0 && (
+                <ul className="space-y-1">
+                  {collab.payments.map((p) => (
+                    <li key={p.id} className="rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+                      {editingPaymentId === p.id ? (
+                        <div className="space-y-1.5">
+                          <div className="grid gap-1 sm:grid-cols-2">
+                            <Input
+                              value={editingPaymentAmount}
+                              onChange={(e) => setEditingPaymentAmount(e.target.value)}
+                              className="h-7 text-xs"
+                            />
+                            <Input
+                              type="date"
+                              value={editingPaymentDate}
+                              onChange={(e) => setEditingPaymentDate(e.target.value)}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          <Input
+                            value={editingPaymentNote}
+                            onChange={(e) => setEditingPaymentNote(e.target.value)}
+                            className="h-7 text-xs"
+                          />
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 rounded-full px-2 text-xs"
+                              onClick={() => {
+                                start(() => {
+                                  void (async () => {
+                                    const r = await updateCollaborationPayment({
+                                      id: p.id,
+                                      collaborationId: collab.id,
+                                      amount: editingPaymentAmount,
+                                      paidAt: editingPaymentDate,
+                                      note: editingPaymentNote,
+                                    });
+                                    if (!r.ok) {
+                                      setPaymentError(r.error);
+                                      return;
+                                    }
+                                    setEditingPaymentId(null);
+                                    router.refresh();
+                                  })();
+                                });
+                              }}
+                            >
+                              Salva
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-full px-2 text-xs"
+                              onClick={() => setEditingPaymentId(null)}
+                            >
+                              Annulla
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <span>
+                            {new Date(p.paid_at + "T12:00:00").toLocaleDateString("it-IT")}{" "}
+                            {p.note ? `· ${p.note}` : ""}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-gray-900">{eur(Number(p.amount))}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => {
+                                setEditingPaymentId(p.id);
+                                setEditingPaymentAmount(String(p.amount));
+                                setEditingPaymentDate(p.paid_at);
+                                setEditingPaymentNote(p.note ?? "");
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-gray-400 hover:text-red-600"
+                              onClick={() => {
+                                start(() => {
+                                  void (async () => {
+                                    const r = await deleteCollaborationPayment({
+                                      id: p.id,
+                                      collaborationId: collab.id,
+                                    });
+                                    if (!r.ok) {
+                                      setPaymentError(r.error);
+                                      return;
+                                    }
+                                    router.refresh();
+                                  })();
+                                });
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>

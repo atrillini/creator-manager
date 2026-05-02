@@ -22,7 +22,7 @@ export default async function AziendePage() {
         description="Anagrafica brand: dati in Supabase; crea e riutilizza nelle collaborazioni."
         actions={<CreateBrandDialog />}
       />
-      <div className="overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+      <div className="ui-enter overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
         <Table>
           <TableHeader>
             <TableRow className="border-0 border-b border-gray-100/80">

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isDeliverableWorkflowStatus } from "@/lib/deliverable-statuses";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 import { EVENT_TYPES, type EventType } from "@/lib/collab-event-types";
 
 const path = (id: string) => `/collaborations/${id}`;
@@ -33,11 +33,12 @@ export async function updateGeneralNotes(
   collaborationId: string,
   generalNotes: string
 ) {
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { error } = await supabase
     .from("collaborations")
     .update({ general_notes: generalNotes })
-    .eq("id", collaborationId);
+    .eq("id", collaborationId)
+    .eq("user_id", userId);
   if (error) {
     return { ok: false as const, error: error.message };
   }
@@ -69,9 +70,10 @@ export async function addCollaborationEvent(
   if (Number.isNaN(at.getTime())) {
     return { ok: false as const, error: "Data o ora non valide" };
   }
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { error } = await supabase.from("collaboration_events").insert({
     collaboration_id: collaborationId,
+    user_id: userId,
     event_type: eventType,
     description: finalDescription,
     attached_file_url: attachedFileUrl,
@@ -129,12 +131,13 @@ export async function updateCollaborationEvent(
   if (!norm.ok) {
     return norm;
   }
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("collaboration_events")
     .update(norm.payload)
     .eq("id", eventId)
     .eq("collaboration_id", collaborationId)
+    .eq("user_id", userId)
     .select("id")
     .maybeSingle();
   if (error) {
@@ -151,12 +154,13 @@ export async function deleteCollaborationEvent(
   collaborationId: string,
   eventId: string
 ) {
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("collaboration_events")
     .delete()
     .eq("id", eventId)
     .eq("collaboration_id", collaborationId)
+    .eq("user_id", userId)
     .select("id")
     .maybeSingle();
   if (error) {
@@ -186,9 +190,10 @@ export async function addDeliverable(
     return { ok: false as const, error: "Data di pubblicazione non valida" };
   }
   const link = normalizeContentUrl(contentUrl);
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { error } = await supabase.from("deliverables").insert({
     collaboration_id: collaborationId,
+    user_id: userId,
     type,
     publish_date: publishDate,
     status,
@@ -225,7 +230,7 @@ export async function updateDeliverable(
   const link = normalizeContentUrl(
     input.contentUrl === null ? "" : input.contentUrl
   );
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("deliverables")
     .update({
@@ -236,6 +241,7 @@ export async function updateDeliverable(
     })
     .eq("id", deliverableId)
     .eq("collaboration_id", collaborationId)
+    .eq("user_id", userId)
     .select("id")
     .maybeSingle();
   if (error) {

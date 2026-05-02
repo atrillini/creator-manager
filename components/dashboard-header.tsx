@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { AIAssistantDrawer } from "@/components/ai/ai-assistant-drawer";
+import { UserMenu } from "@/components/auth/user-menu";
 
 type Props = {
   title: string;
@@ -50,7 +52,11 @@ export function DashboardHeader({
           </p>
         )}
       </div>
-      {right ? <div className="w-full min-w-0 sm:max-w-xs sm:shrink-0">{right}</div> : null}
+      <div className="flex w-full min-w-0 items-start justify-end gap-2 sm:max-w-[30rem] sm:shrink-0">
+        {right ? <div className="w-full min-w-0">{right}</div> : null}
+        <AIAssistantDrawer />
+        <UserMenu />
+      </div>
     </div>
   );
 }

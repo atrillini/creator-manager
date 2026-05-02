@@ -8,7 +8,8 @@ import {
 } from "@/lib/collaboration-form-shared";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
 import { isValidUuid } from "@/lib/is-uuid";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PlannedDeliverableInput = {
   publishDate: string;
@@ -26,6 +27,10 @@ export type CreateCollaborationInput = {
   feePerContent?: string;
   /** Opzionale: solo righe con data valida vengono inserite; il resto si aggiunge dalla scheda. */
   plannedDeliverables?: PlannedDeliverableInput[];
+  /** Opzionale: nota iniziale in timeline (es. brief incollato + link). */
+  initialTimelineNote?: string;
+  /** Opzionale: pagamenti iniziali estratti dal brief. */
+  initialPayments?: { amount: string; paidAt: string; note?: string }[];
 };
 
 function isStatus(s: string): s is CollabStatus {
@@ -40,6 +45,79 @@ function filterValidPlanned(
     const d = (p.publishDate ?? "").trim();
     return isValidDateKey(d) && isDeliverableType(p.type);
   });
+}
+
+async function insertPlannedDeliverables(
+  supabase: SupabaseClient,
+  collabId: string,
+  planned: PlannedDeliverableInput[],
+  userId: string
+) {
+  if (planned.length === 0) {
+    return { ok: true as const };
+  }
+  const delivRows = planned.map((p) => ({
+    collaboration_id: collabId,
+    user_id: userId,
+    type: p.type,
+    publish_date: p.publishDate,
+    status: "da girare" as const,
+    content_url: null as string | null,
+  }));
+  const { error: dErr } = await supabase.from("deliverables").insert(delivRows);
+  if (dErr) {
+    await supabase
+      .from("collaborations")
+      .delete()
+      .eq("id", collabId)
+      .eq("user_id", userId);
+    return { ok: false as const, error: dErr.message };
+  }
+  return { ok: true as const };
+}
+
+async function insertInitialTimelineNote(
+  supabase: SupabaseClient,
+  collabId: string,
+  note: string | undefined,
+  userId: string
+) {
+  const n = (note ?? "").trim();
+  if (!n) return;
+  await supabase.from("collaboration_events").insert({
+    collaboration_id: collabId,
+    user_id: userId,
+    event_type: "nota",
+    description: n.slice(0, 4000),
+    attached_file_url: null,
+    event_at: new Date().toISOString(),
+  });
+}
+
+async function insertInitialPayments(
+  supabase: SupabaseClient,
+  collabId: string,
+  payments: { amount: string; paidAt: string; note?: string }[] | undefined,
+  userId: string
+) {
+  if (!payments?.length) return;
+  const rows = payments
+    .map((p) => {
+      const amountParsed = parseFee(String(p.amount ?? ""));
+      const amount = amountParsed.ok ? amountParsed.value : 0;
+      const paidAt = String(p.paidAt ?? "").trim();
+      if (amount <= 0 || !isValidDateKey(paidAt)) return null;
+      return {
+        collaboration_id: collabId,
+        user_id: userId,
+        amount,
+        paid_at: paidAt,
+        note: p.note?.trim() || "Pagamento inserito da brief",
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => !!r);
+  if (rows.length === 0) return;
+  await supabase.from("collaboration_payments").insert(rows);
 }
 
 export async function createCollaboration(
@@ -59,7 +137,7 @@ export async function createCollaboration(
   const url = (input.contractUrl ?? "").trim();
   const contractUrl = url ? url : null;
 
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
 
   if (input.isPeriodic) {
     const n = input.contentCount;
@@ -81,6 +159,7 @@ export async function createCollaboration(
     const { data, error } = await supabase
       .from("collaborations")
       .insert({
+        user_id: userId,
         brand_id: input.brandId,
         status: input.status,
         brief_text: brief,
@@ -103,20 +182,13 @@ export async function createCollaboration(
     const collabId = data.id;
 
     if (planned.length > 0) {
-      const delivRows = planned.map((p) => ({
-        collaboration_id: collabId,
-        type: p.type,
-        publish_date: p.publishDate,
-        status: "da girare" as const,
-        content_url: null as string | null,
-      }));
-
-      const { error: dErr } = await supabase.from("deliverables").insert(delivRows);
-      if (dErr) {
-        await supabase.from("collaborations").delete().eq("id", collabId);
-        return { ok: false, error: dErr.message };
+      const ins = await insertPlannedDeliverables(supabase, collabId, planned, userId);
+      if (!ins.ok) {
+        return { ok: false, error: ins.error };
       }
     }
+    await insertInitialPayments(supabase, collabId, input.initialPayments, userId);
+    await insertInitialTimelineNote(supabase, collabId, input.initialTimelineNote, userId);
 
     revalidateCollaborationPaths(collabId);
     return { ok: true, id: collabId };
@@ -128,9 +200,12 @@ export async function createCollaboration(
   }
   const agreedFee = feeP.value === 0 ? null : feeP.value;
 
+  const planned = filterValidPlanned(input.plannedDeliverables);
+
   const { data, error } = await supabase
     .from("collaborations")
     .insert({
+      user_id: userId,
       brand_id: input.brandId,
       status: input.status,
       brief_text: brief,
@@ -149,6 +224,15 @@ export async function createCollaboration(
   if (!data || !isValidUuid(data.id)) {
     return { ok: false, error: "Risposta inattesa dal server" };
   }
+
+  if (planned.length > 0) {
+    const ins = await insertPlannedDeliverables(supabase, data.id, planned, userId);
+    if (!ins.ok) {
+      return { ok: false, error: ins.error };
+    }
+  }
+  await insertInitialPayments(supabase, data.id, input.initialPayments, userId);
+  await insertInitialTimelineNote(supabase, data.id, input.initialTimelineNote, userId);
 
   revalidateCollaborationPaths(data.id);
   return { ok: true, id: data.id };

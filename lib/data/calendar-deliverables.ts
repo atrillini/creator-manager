@@ -1,4 +1,4 @@
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 export type CalendarDeliverableItem = {
   id: string;
@@ -46,12 +46,13 @@ function brandNameFromJoin(collab: CollabJoin | null): string {
  * Deliverable con data di pubblicazione, join a collaborations e brands.
  */
 export async function getDeliverableCalendarItems(): Promise<CalendarDeliverableItem[]> {
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("deliverables")
     .select(
       "id, type, status, publish_date, content_url, collaboration_id, collaborations ( id, brands ( name ) )"
     )
+    .eq("user_id", userId)
     .not("publish_date", "is", null)
     .order("publish_date", { ascending: true });
 

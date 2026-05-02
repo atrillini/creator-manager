@@ -1,10 +1,11 @@
 import { DashboardHeader } from "@/components/dashboard-header";
+import { YouTubeHeroWidget } from "@/components/dashboard/youtube-hero-widget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDashboardStats } from "@/lib/data/fetchers";
+import { getDashboardStats, getLatestYoutubeStats } from "@/lib/data/fetchers";
 import { Calendar, Euro, ListTodo } from "lucide-react";
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats();
+  const [stats, yt] = await Promise.all([getDashboardStats(), getLatestYoutubeStats()]);
 
   return (
     <div>
@@ -12,7 +13,10 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Riepilogo collaborazioni, scadenze e andamento economico. Dati fittizi per l’anteprima."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="ui-enter mb-4">
+        <YouTubeHeroWidget initial={yt} />
+      </div>
+      <div className="ui-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-900">Collaborazioni aperte</CardTitle>

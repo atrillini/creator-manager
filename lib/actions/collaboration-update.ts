@@ -4,7 +4,7 @@ import { COLLAB_STATUSES, type CollabStatus } from "@/lib/collab-statuses";
 import { parseFee } from "@/lib/collaboration-form-shared";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
 import { isValidUuid } from "@/lib/is-uuid";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 export type UpdateCollaborationInput = {
   collaborationId: string;
@@ -41,7 +41,7 @@ export async function updateCollaboration(
 
   const url = (input.contractUrl ?? "").trim();
   const contractUrl = url ? url : null;
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
 
   if (input.isPeriodic) {
     const n = input.contentCount;
@@ -69,7 +69,8 @@ export async function updateCollaboration(
         content_count: n,
         fee_per_content: fpcP.value,
       })
-      .eq("id", input.collaborationId);
+      .eq("id", input.collaborationId)
+      .eq("user_id", userId);
 
     if (error) {
       return { ok: false, error: error.message };
@@ -96,7 +97,8 @@ export async function updateCollaboration(
       content_count: null,
       fee_per_content: null,
     })
-    .eq("id", input.collaborationId);
+    .eq("id", input.collaborationId)
+    .eq("user_id", userId);
 
   if (error) {
     return { ok: false, error: error.message };

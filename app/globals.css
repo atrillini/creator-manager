@@ -102,5 +102,91 @@
     background-attachment: fixed;
     font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text",
       system-ui, sans-serif;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -8% -10%;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      radial-gradient(ellipse 70% 45% at 18% 14%, rgb(255 255 255 / 0.5) 0%, transparent 62%),
+      radial-gradient(ellipse 56% 38% at 82% 18%, rgb(206 220 255 / 0.2) 0%, transparent 62%),
+      radial-gradient(ellipse 45% 34% at 80% 82%, rgb(214 220 235 / 0.16) 0%, transparent 60%);
+    filter: blur(2px);
+    animation: ui-bg-drift 30s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+}
+
+@keyframes ui-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ui-bg-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: translate3d(1%, -0.8%, 0) scale(1.012);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.88;
+  }
+}
+
+@layer components {
+  .ui-enter {
+    animation: ui-fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ui-ease {
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      opacity 180ms ease;
+  }
+
+  .ui-stagger > * {
+    opacity: 0;
+    animation: ui-fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .ui-stagger > *:nth-child(1) { animation-delay: 40ms; }
+  .ui-stagger > *:nth-child(2) { animation-delay: 90ms; }
+  .ui-stagger > *:nth-child(3) { animation-delay: 140ms; }
+  .ui-stagger > *:nth-child(4) { animation-delay: 190ms; }
+  .ui-stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .ui-stagger > *:nth-child(6) { animation-delay: 290ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none !important;
+  }
+  .ui-enter {
+    animation: none !important;
+  }
+  .ui-stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  .ui-ease {
+    transition: none !important;
   }
 }

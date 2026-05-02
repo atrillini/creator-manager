@@ -2,7 +2,11 @@
 
 import { createCollaboration } from "@/lib/actions/collaboration-create";
 import { COLLAB_STATUS_OPTIONS } from "@/lib/collab-statuses";
-import { parseMoneyLocal } from "@/lib/collaboration-form-shared";
+import {
+  isDeliverableType,
+  isValidDateKey,
+  parseMoneyLocal,
+} from "@/lib/collaboration-form-shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,6 +38,20 @@ export type BrandOption = { id: string; name: string };
 
 type Props = {
   brands: BrandOption[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+  initialDraft?: {
+    brandId?: string;
+    briefText?: string;
+    agreedFee?: string;
+    isPeriodic?: boolean;
+    contentCount?: number;
+    feePerContent?: string;
+    plannedDeliverables?: { type: string; publishDate: string }[];
+    initialTimelineNote?: string;
+    initialPayments?: { amount: string; paidAt: string; note?: string }[];
+  } | null;
 };
 
 function pickDefaultBrandId(
@@ -52,9 +70,15 @@ function formatEur(n: number) {
   }).format(n);
 }
 
-export function CreateCollaborationDialog({ brands }: Props) {
+export function CreateCollaborationDialog({
+  brands,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+  initialDraft,
+}: Props) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [status, setStatus] = useState("proposta");
@@ -63,11 +87,52 @@ export function CreateCollaborationDialog({ brands }: Props) {
   const [contentCount, setContentCount] = useState(1);
   const [feePerContent, setFeePerContent] = useState("");
   const [agreedFee, setAgreedFee] = useState("");
+  const [briefText, setBriefText] = useState("");
+  const [contractUrl, setContractUrl] = useState("");
+  const [plannedDeliverables, setPlannedDeliverables] = useState<
+    { type: string; publishDate: string }[]
+  >([]);
+  const [initialTimelineNote, setInitialTimelineNote] = useState<string>("");
+  const [initialPayments, setInitialPayments] = useState<
+    { amount: string; paidAt: string; note?: string }[]
+  >([]);
   const briefId = useId();
+  const open = controlledOpen ?? internalOpen;
 
   useEffect(() => {
     setBrandId((cur) => pickDefaultBrandId(brands, cur));
   }, [brands]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!initialDraft) {
+      setInitialTimelineNote("");
+      setInitialPayments([]);
+      return;
+    }
+    if (initialDraft.brandId && brands.some((b) => b.id === initialDraft.brandId)) {
+      setBrandId(initialDraft.brandId);
+    }
+    if (initialDraft.briefText != null) setBriefText(initialDraft.briefText);
+    if (initialDraft.agreedFee != null) setAgreedFee(initialDraft.agreedFee);
+    if (initialDraft.isPeriodic != null) setIsPeriodic(initialDraft.isPeriodic);
+    if (initialDraft.contentCount != null) setContentCount(initialDraft.contentCount);
+    if (initialDraft.feePerContent != null) setFeePerContent(initialDraft.feePerContent);
+    if (initialDraft.plannedDeliverables) {
+      setPlannedDeliverables(initialDraft.plannedDeliverables);
+    }
+    if (initialDraft.initialTimelineNote != null) {
+      setInitialTimelineNote(initialDraft.initialTimelineNote);
+    }
+    if (initialDraft.initialPayments) {
+      setInitialPayments(initialDraft.initialPayments);
+    }
+  }, [open, initialDraft, brands]);
+
+  function setOpenSafe(next: boolean) {
+    if (onOpenChange) onOpenChange(next);
+    else setInternalOpen(next);
+  }
 
   const periodicTotal = useMemo(() => {
     if (!isPeriodic) return 0;
@@ -87,21 +152,12 @@ export function CreateCollaborationDialog({ brands }: Props) {
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
-    const form = e.currentTarget;
-    const brief = (form.elements.namedItem("briefText") as HTMLTextAreaElement)
-      .value;
-    const contractUrl = (
-      form.elements.namedItem("contractUrl") as HTMLInputElement
-    ).value;
+    const brief = briefText;
     if (!brandId) {
       setErr("Seleziona un’azienda oppure aggiungine una in Aziende.");
       return;
     }
-
-    const agreedEl = form.elements.namedItem("agreedFee") as
-      | HTMLInputElement
-      | null;
-    const agreedFeeField = agreedEl?.value ?? "";
+    const agreedFeeField = agreedFee;
 
     start(() => {
       void (async () => {
@@ -114,18 +170,26 @@ export function CreateCollaborationDialog({ brands }: Props) {
           agreedFee: isPeriodic ? "" : agreedFeeField,
           contentCount: isPeriodic ? contentCount : undefined,
           feePerContent: isPeriodic ? feePerContent : undefined,
+          plannedDeliverables: plannedDeliverables
+            .filter((d) => isValidDateKey(d.publishDate) && isDeliverableType(d.type)),
+          initialTimelineNote,
+          initialPayments,
         });
         if (!res.ok) {
           setErr(res.error);
           return;
         }
-        setOpen(false);
-        form.reset();
+        setOpenSafe(false);
         setStatus("proposta");
         setIsPeriodic(false);
         setContentCount(1);
         setFeePerContent("");
         setAgreedFee("");
+        setBriefText("");
+        setContractUrl("");
+        setPlannedDeliverables([]);
+        setInitialTimelineNote("");
+        setInitialPayments([]);
         setBrandId(pickDefaultBrandId(brands, ""));
         router.refresh();
       })();
@@ -136,16 +200,18 @@ export function CreateCollaborationDialog({ brands }: Props) {
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        setOpen(o);
+        setOpenSafe(o);
         if (o) setErr(null);
       }}
     >
-      <DialogTrigger asChild>
-        <Button type="button" size="sm" className="gap-1">
-          <Plus className="size-4" />
-          Nuova collaborazione
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger ? (
+        <DialogTrigger asChild>
+          <Button type="button" size="sm" className="gap-1">
+            <Plus className="size-4" />
+            Nuova collaborazione
+          </Button>
+        </DialogTrigger>
+      ) : null}
       <DialogContent
         onPointerDownOutside={(e) => pending && e.preventDefault()}
         onEscapeKeyDown={(e) => pending && e.preventDefault()}
@@ -169,7 +235,7 @@ export function CreateCollaborationDialog({ brands }: Props) {
               e aggiungi un brand, poi riapri questa finestra.
             </p>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setOpenSafe(false)}>
                 Chiudi
               </Button>
               <Button asChild>
@@ -208,6 +274,8 @@ export function CreateCollaborationDialog({ brands }: Props) {
                 minLength={1}
                 rows={3}
                 placeholder="Es. Pacchetto 10 Reel 2026"
+                value={briefText}
+                onChange={(e) => setBriefText(e.target.value)}
                 className="min-h-[88px] resize-y"
                 disabled={pending}
               />
@@ -321,6 +389,21 @@ export function CreateCollaborationDialog({ brands }: Props) {
               </div>
             )}
 
+            {plannedDeliverables.length > 0 && (
+              <div className="space-y-2 rounded-2xl bg-gray-50/80 p-3">
+                <p className="text-xs font-medium text-gray-500">
+                  Scadenze precompilate dal brief ({plannedDeliverables.length})
+                </p>
+                <ul className="space-y-1 text-xs text-gray-600">
+                  {plannedDeliverables.map((d, i) => (
+                    <li key={`${d.type}-${d.publishDate}-${i}`} className="rounded-lg bg-white px-2 py-1">
+                      {d.type} · {d.publishDate}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="curl">URL contratto (opz.)</Label>
               <Input
@@ -328,6 +411,8 @@ export function CreateCollaborationDialog({ brands }: Props) {
                 name="contractUrl"
                 type="url"
                 placeholder="https://…"
+                  value={contractUrl}
+                  onChange={(e) => setContractUrl(e.target.value)}
                 disabled={pending}
                 className="rounded-xl"
               />
@@ -341,7 +426,7 @@ export function CreateCollaborationDialog({ brands }: Props) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => setOpenSafe(false)}
                 disabled={pending}
               >
                 Annulla

@@ -5,7 +5,7 @@ import {
   formatContactsSummaryLine,
   type BrandContact,
 } from "@/lib/brand-contacts";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 import { isValidUuid } from "@/lib/is-uuid";
 
 export type CreateBrandInput = {
@@ -34,10 +34,11 @@ export async function createBrand(
   );
   const line = formatContactsSummaryLine(people);
 
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("brands")
     .insert({
+      user_id: userId,
       name,
       sector: input.sector?.trim() || null,
       contacts: line || null,
@@ -79,7 +80,7 @@ export async function updateBrand(
   );
   const line = formatContactsSummaryLine(people);
 
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data: updated, error } = await supabase
     .from("brands")
     .update({
@@ -90,6 +91,7 @@ export async function updateBrand(
       notes: input.notes?.trim() || null,
     })
     .eq("id", input.id)
+    .eq("user_id", userId)
     .select("id")
     .maybeSingle();
 
@@ -107,7 +109,8 @@ export async function updateBrand(
   const { data: collabRows } = await supabase
     .from("collaborations")
     .select("id")
-    .eq("brand_id", input.id);
+    .eq("brand_id", input.id)
+    .eq("user_id", userId);
   for (const row of collabRows ?? []) {
     if (row?.id) {
       revalidatePath(`/collaborations/${row.id}`);

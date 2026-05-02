@@ -1,6 +1,6 @@
 import { parseContactsJson, type BrandContact } from "@/lib/brand-contacts";
 import { isValidUuid } from "@/lib/is-uuid";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 import type { EventType } from "@/lib/collab-event-types";
 
 export type BrandLite = {
@@ -33,6 +33,13 @@ export type DeliverableRow = {
   content_url: string | null;
 };
 
+export type CollaborationPaymentRow = {
+  id: string;
+  paid_at: string;
+  amount: number;
+  note: string | null;
+};
+
 export type CollaborationDetail = {
   id: string;
   general_notes: string | null;
@@ -43,6 +50,7 @@ export type CollaborationDetail = {
   status: string;
   contract_url: string | null;
   created_at: string;
+  paid_at: string | null;
   is_periodic: boolean;
   content_count: number | null;
   fee_per_content: string | null;
@@ -50,6 +58,9 @@ export type CollaborationDetail = {
   brand: BrandLite | null;
   events: CollaborationEventRow[];
   deliverables: DeliverableRow[];
+  payments: CollaborationPaymentRow[];
+  paid_total: number;
+  remaining_due: number | null;
 };
 
 export type LoadCollaborationResult =
@@ -74,6 +85,7 @@ type CollaborationRow = {
   status: string;
   contract_url: string | null;
   created_at: string;
+  paid_at: string | null;
   is_periodic: boolean | null;
   content_count: number | null;
   fee_per_content: number | string | null;
@@ -134,16 +146,17 @@ export async function getCollaborationDetail(
     return { ok: false, notFound: true };
   }
 
-  const supabase = createSupabaseClient();
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
 
   const { data: collab, error: cErr } = await supabase
     .from("collaborations")
     .select(
-      `id, general_notes, agreed_fee, brief_text, status, contract_url, created_at,
+      `id, general_notes, agreed_fee, brief_text, status, contract_url, created_at, paid_at,
       is_periodic, content_count, fee_per_content,
       brands ( id, name, sector, contacts, contacts_json, notes )`
     )
     .eq("id", id)
+    .eq("user_id", userId)
     .maybeSingle<CollaborationRow>();
 
   if (cErr) {
@@ -157,6 +170,7 @@ export async function getCollaborationDetail(
     .from("collaboration_events")
     .select("id, created_at, event_at, event_type, description, attached_file_url")
     .eq("collaboration_id", id)
+    .eq("user_id", userId)
     .order("event_at", { ascending: false, nullsFirst: false });
 
   if (eErr) {
@@ -167,10 +181,21 @@ export async function getCollaborationDetail(
     .from("deliverables")
     .select("id, created_at, type, publish_date, status, content_url")
     .eq("collaboration_id", id)
+    .eq("user_id", userId)
     .order("publish_date", { ascending: true, nullsFirst: false });
 
   if (dErr) {
     return { ok: false, message: dErr.message };
+  }
+
+  const { data: pays, error: pErr } = await supabase
+    .from("collaboration_payments")
+    .select("id, paid_at, amount, note")
+    .eq("collaboration_id", id)
+    .eq("user_id", userId)
+    .order("paid_at", { ascending: false });
+  if (pErr) {
+    return { ok: false, message: pErr.message };
   }
 
   const eventRows: CollaborationEventRow[] = (events ?? []).map((e) => {
@@ -194,6 +219,9 @@ export async function getCollaborationDetail(
   const fpcRaw = toNumericOrNull(
     collab.fee_per_content as number | string | null
   );
+  const payments = (pays ?? []) as CollaborationPaymentRow[];
+  const paidTotal = payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0);
+  const remainingDue = agreedRaw == null ? null : Math.max(0, agreedRaw - paidTotal);
 
   const detail: CollaborationDetail = {
     id: collab.id,
@@ -204,6 +232,7 @@ export async function getCollaborationDetail(
     status: collab.status,
     contract_url: collab.contract_url,
     created_at: collab.created_at,
+    paid_at: collab.paid_at,
     is_periodic: collab.is_periodic === true,
     content_count:
       collab.content_count == null
@@ -218,6 +247,9 @@ export async function getCollaborationDetail(
     brand: normalizeBrand(collab),
     events: eventRows,
     deliverables: (deliv ?? []) as DeliverableRow[],
+    payments,
+    paid_total: paidTotal,
+    remaining_due: remainingDue,
   };
 
   return { ok: true, data: detail };
