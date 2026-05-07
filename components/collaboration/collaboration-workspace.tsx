@@ -337,67 +337,70 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
             Collaborazioni
           </Link>
         </Button>
-        {brandOptions.length > 0 && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setEditCollabOpen(true)}
-            className="gap-1.5 rounded-full border-0 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.05)]"
-          >
-            <PenLine className="size-3.5" />
-            Modifica
-          </Button>
-        )}
       </div>
       <DashboardHeader
         title={title}
         description={collab.brand?.name ? `con ${collab.brand.name}` : undefined}
         end={
-          <div className="flex w-full min-w-0 flex-col items-stretch gap-1.5 sm:ml-auto sm:w-auto sm:items-end sm:text-right">
-            <span className="text-left text-xs font-medium text-gray-500 sm:text-right">
-              Stato
-            </span>
-            <Select
-              value={statusLocal}
-              onValueChange={(v) => {
-                setStatusLocal(v);
-                start(() => {
-                  void (async () => {
-                    const r = await setCollaborationStatus(collab.id, v);
-                    if (r.ok) {
-                      router.refresh();
-                    } else {
-                      setStatusLocal(collab.status);
-                      if (process.env.NODE_ENV === "development")
-                        console.error(r.error);
-                    }
-                  })();
-                });
-              }}
-              disabled={pending}
-            >
-              <SelectTrigger
-                className="h-9 w-full min-w-[12rem] rounded-xl border-0 bg-white text-gray-900 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
-                id={`${formId}-collab-status`}
-                aria-label="Cambia stato collaborazione"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {COLLAB_STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="mt-1 flex items-center justify-end gap-2">
+          <div className="w-full rounded-2xl bg-white/85 p-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] sm:w-auto sm:min-w-[19rem]">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[12rem] flex-1 space-y-1">
+                <span className="block text-xs font-medium text-gray-500">Stato</span>
+                <Select
+                  value={statusLocal}
+                  onValueChange={(v) => {
+                    setStatusLocal(v);
+                    start(() => {
+                      void (async () => {
+                        const r = await setCollaborationStatus(collab.id, v);
+                        if (r.ok) {
+                          router.refresh();
+                        } else {
+                          setStatusLocal(collab.status);
+                          if (process.env.NODE_ENV === "development")
+                            console.error(r.error);
+                        }
+                      })();
+                    });
+                  }}
+                  disabled={pending}
+                >
+                  <SelectTrigger
+                    className="h-9 w-full rounded-xl border-0 bg-gray-50 text-gray-900 shadow-none"
+                    id={`${formId}-collab-status`}
+                    aria-label="Cambia stato collaborazione"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COLLAB_STATUS_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {brandOptions.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditCollabOpen(true)}
+                  className="h-9 gap-1.5 rounded-xl border-gray-200 bg-white px-3"
+                >
+                  <PenLine className="size-3.5" />
+                  Modifica
+                </Button>
+              )}
+            </div>
+
+            <div className="mt-2.5 border-t border-gray-100 pt-2">
               {collab.paid_at ? (
-                <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
                     <CheckCircle2 className="size-3.5" />
-                    Pagata il{" "}
+                    Saldato il{" "}
                     {new Date(collab.paid_at).toLocaleDateString("it-IT", {
                       day: "2-digit",
                       month: "short",
@@ -423,9 +426,9 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                       });
                     }}
                   >
-                    Segna non pagata
+                    Riapri saldo
                   </Button>
-                </>
+                </div>
               ) : (
                 <Button
                   type="button"
@@ -446,7 +449,7 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                     });
                   }}
                 >
-                  Segna pagata
+                  Segna saldata
                 </Button>
               )}
             </div>
@@ -829,7 +832,7 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                     });
                   }}
                 >
-                  Aggiungi pagamento
+                  Registra pagamento
                 </Button>
               </div>
               {collab.payments.length > 0 && (
