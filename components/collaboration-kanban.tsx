@@ -167,11 +167,14 @@ function DroppableColumnContent({
   );
 }
 
+const COMPLETED_COLLAPSE_THRESHOLD = 20;
+
 export function CollaborationKanban({ collaborations }: Props) {
   const dndId = useId();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [activeDrag, setActiveDrag] = useState<MockCollaboration | null>(null);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
@@ -231,6 +234,13 @@ export function CollaborationKanban({ collaborations }: Props) {
         {KANBAN_COLUMNS.map((col) => {
           const items = columnItems(collaborations, col.id);
           const cId = colId(col.id);
+          const isCompleted = col.id === "completate";
+          const shouldCollapse =
+            isCompleted && !completedExpanded && items.length > COMPLETED_COLLAPSE_THRESHOLD;
+          const visibleItems = shouldCollapse
+            ? items.slice(0, COMPLETED_COLLAPSE_THRESHOLD)
+            : items;
+          const hiddenCount = items.length - visibleItems.length;
           return (
             <Card
               key={col.id}
@@ -253,7 +263,7 @@ export function CollaborationKanban({ collaborations }: Props) {
                 <DroppableColumnContent colIdStr={cId}>
                   <ScrollArea className="h-[min(300px,42vh)]">
                     <ul className="space-y-1.5 px-2 py-0.5 pb-3 pr-1.5">
-                      {items.map((c) => (
+                      {visibleItems.map((c) => (
                         <li key={c.id} className="w-full min-w-0 max-w-full">
                           <div className="w-full min-w-0 max-w-full pr-0.5">
                             <DraggableRow c={c} droppableId={cId} />
@@ -264,6 +274,19 @@ export function CollaborationKanban({ collaborations }: Props) {
                         <p className="px-1 py-6 text-center text-xs text-gray-400">
                           Rilascia una card qui
                         </p>
+                      )}
+                      {isCompleted && items.length > COMPLETED_COLLAPSE_THRESHOLD && (
+                        <li className="px-1 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setCompletedExpanded((v) => !v)}
+                            className="w-full rounded-full border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                          >
+                            {completedExpanded
+                              ? "Comprimi"
+                              : `Mostra tutte (${hiddenCount} altre)`}
+                          </button>
+                        </li>
                       )}
                     </ul>
                   </ScrollArea>

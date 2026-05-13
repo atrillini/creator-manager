@@ -36,10 +36,42 @@ function feeString(v: number | string | null | undefined): string | null {
   }).format(v);
 }
 
-/** Prova Supabase, altrimenti dati fittizi (ID mock non hanno un record reale). */
-export async function getCollaborations() {
+export type GetCollaborationsOptions = {
+  /** ISO date inclusivo (YYYY-MM-DD), confrontato con `created_at`. */
+  startDate?: string;
+  /** ISO date inclusivo (YYYY-MM-DD), confrontato con `created_at`. */
+  endDate?: string;
+  /** Testo libero: filtra per `brief_text` o nome brand (case-insensitive). */
+  query?: string;
+};
+
+export type GetCollaborationsResult = {
+  items: {
+    id: string;
+    title: string;
+    brandName: string;
+    agreedFee: string | null;
+    isGiveaway: boolean;
+    giveawayValue: string | null;
+    kanbanStatus: ReturnType<typeof mapStatusToKanban>;
+  }[];
+  /** Totale collaborazioni dell'utente (senza filtri), per mostrare "X di Y". */
+  totalCount: number;
+};
+
+/** Lista collaborazioni filtrata. Filtri opzionali su `created_at` e ricerca testuale. */
+export async function getCollaborations(
+  opts: GetCollaborationsOptions = {}
+): Promise<GetCollaborationsResult> {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
-  const { data, error } = await supabase
+
+  const totalRes = await supabase
+    .from("collaborations")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  const totalCount = totalRes.count ?? 0;
+
+  let q = supabase
     .from("collaborations")
     .select(
       "id, status, agreed_fee, brief_text, is_giveaway, giveaway_value, brands ( name )"
@@ -47,27 +79,43 @@ export async function getCollaborations() {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
+  if (opts.startDate) q = q.gte("created_at", `${opts.startDate}T00:00:00`);
+  if (opts.endDate) q = q.lte("created_at", `${opts.endDate}T23:59:59`);
+
+  const { data, error } = await q;
+
   if (error) {
     if (process.env.NODE_ENV === "development")
       console.warn("[CreatorCRM] collaborazioni:", error.message);
-    return [];
+    return { items: [], totalCount };
   }
   if (!data?.length) {
-    return [];
+    return { items: [], totalCount };
   }
-  return data.map((row: unknown) => {
-    const c = row as CollabRow;
-    const s = c.status;
-    return {
-      id: c.id,
-      title: c.brief_text?.trim() || "Senza titolo",
-      brandName: brandName(c.brands),
-      agreedFee: feeString(c.agreed_fee),
-      isGiveaway: c.is_giveaway === true,
-      giveawayValue: feeString(c.giveaway_value),
-      kanbanStatus: mapStatusToKanban(s),
-    };
-  });
+
+  const needle = (opts.query ?? "").trim().toLowerCase();
+  const items = data
+    .map((row: unknown) => {
+      const c = row as CollabRow;
+      return {
+        id: c.id,
+        title: c.brief_text?.trim() || "Senza titolo",
+        brandName: brandName(c.brands),
+        agreedFee: feeString(c.agreed_fee),
+        isGiveaway: c.is_giveaway === true,
+        giveawayValue: feeString(c.giveaway_value),
+        kanbanStatus: mapStatusToKanban(c.status),
+      };
+    })
+    .filter((it) => {
+      if (!needle) return true;
+      return (
+        it.title.toLowerCase().includes(needle) ||
+        it.brandName.toLowerCase().includes(needle)
+      );
+    });
+
+  return { items, totalCount };
 }
 
 export type BrandRow = {
