@@ -23,6 +23,9 @@ type Draft = {
   isPeriodic?: boolean;
   contentCount?: number;
   feePerContent?: string;
+  isGiveaway?: boolean;
+  giveawayDetails?: string;
+  giveawayValue?: string;
   plannedDeliverables?: { type: string; publishDate: string }[];
   initialTimelineNote?: string;
   initialPayments?: { amount: string; paidAt: string; note?: string }[];
@@ -153,6 +156,9 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
               analysis: {
                 brand_name: string;
                 agreed_fee: number | null;
+                is_giveaway?: boolean;
+                giveaway_details?: string | null;
+                giveaway_value?: number | null;
                 deliverables: { type: string; publish_date: string | null }[];
               };
             }
@@ -180,6 +186,12 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
           brandId: pickBrandIdByName(brands, data.analysis.brand_name),
           agreedFee:
             data.analysis.agreed_fee == null ? "" : String(data.analysis.agreed_fee),
+          isGiveaway: data.analysis.is_giveaway === true,
+          giveawayDetails: data.analysis.giveaway_details ?? "",
+          giveawayValue:
+            data.analysis.giveaway_value == null
+              ? ""
+              : String(data.analysis.giveaway_value),
           briefText: `Brand: ${data.analysis.brand_name}${deliverableHint}`,
           plannedDeliverables,
           initialTimelineNote: buildTimelineNote(text),
@@ -253,7 +265,21 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
               <span className="rounded-full bg-white px-2 py-1 text-gray-700">
                 Fee: {previewDraft.agreedFee || "—"}
               </span>
+              {previewDraft.isGiveaway ? (
+                <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">
+                  🎁 Giveaway
+                  {previewDraft.giveawayValue
+                    ? ` · ${previewDraft.giveawayValue}€`
+                    : ""}
+                </span>
+              ) : null}
             </div>
+            {previewDraft.isGiveaway && previewDraft.giveawayDetails ? (
+              <p className="text-xs text-gray-600">
+                <span className="font-medium text-gray-700">Cosa ricevi:</span>{" "}
+                {previewDraft.giveawayDetails}
+              </p>
+            ) : null}
             {(previewDraft.plannedDeliverables?.length ?? 0) > 0 ? (
               <ul className="space-y-1 text-xs text-gray-600">
                 {previewDraft.plannedDeliverables?.map((d, i) => (

@@ -29,7 +29,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus } from "lucide-react";
+import { Gift, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
@@ -48,6 +48,9 @@ type Props = {
     isPeriodic?: boolean;
     contentCount?: number;
     feePerContent?: string;
+    isGiveaway?: boolean;
+    giveawayDetails?: string;
+    giveawayValue?: string;
     plannedDeliverables?: { type: string; publishDate: string }[];
     initialTimelineNote?: string;
     initialPayments?: { amount: string; paidAt: string; note?: string }[];
@@ -87,6 +90,9 @@ export function CreateCollaborationDialog({
   const [contentCount, setContentCount] = useState(1);
   const [feePerContent, setFeePerContent] = useState("");
   const [agreedFee, setAgreedFee] = useState("");
+  const [isGiveaway, setIsGiveaway] = useState(false);
+  const [giveawayDetails, setGiveawayDetails] = useState("");
+  const [giveawayValue, setGiveawayValue] = useState("");
   const [briefText, setBriefText] = useState("");
   const [contractUrl, setContractUrl] = useState("");
   const [plannedDeliverables, setPlannedDeliverables] = useState<
@@ -118,6 +124,9 @@ export function CreateCollaborationDialog({
     if (initialDraft.isPeriodic != null) setIsPeriodic(initialDraft.isPeriodic);
     if (initialDraft.contentCount != null) setContentCount(initialDraft.contentCount);
     if (initialDraft.feePerContent != null) setFeePerContent(initialDraft.feePerContent);
+    if (initialDraft.isGiveaway != null) setIsGiveaway(initialDraft.isGiveaway);
+    if (initialDraft.giveawayDetails != null) setGiveawayDetails(initialDraft.giveawayDetails);
+    if (initialDraft.giveawayValue != null) setGiveawayValue(initialDraft.giveawayValue);
     if (initialDraft.plannedDeliverables) {
       setPlannedDeliverables(initialDraft.plannedDeliverables);
     }
@@ -170,6 +179,9 @@ export function CreateCollaborationDialog({
           agreedFee: isPeriodic ? "" : agreedFeeField,
           contentCount: isPeriodic ? contentCount : undefined,
           feePerContent: isPeriodic ? feePerContent : undefined,
+          isGiveaway,
+          giveawayDetails: isGiveaway ? giveawayDetails : undefined,
+          giveawayValue: isGiveaway ? giveawayValue : undefined,
           plannedDeliverables: plannedDeliverables
             .filter((d) => isValidDateKey(d.publishDate) && isDeliverableType(d.type)),
           initialTimelineNote,
@@ -185,6 +197,9 @@ export function CreateCollaborationDialog({
         setContentCount(1);
         setFeePerContent("");
         setAgreedFee("");
+        setIsGiveaway(false);
+        setGiveawayDetails("");
+        setGiveawayValue("");
         setBriefText("");
         setContractUrl("");
         setPlannedDeliverables([]);
@@ -320,7 +335,9 @@ export function CreateCollaborationDialog({
 
             {!isPeriodic && (
               <div className="space-y-2">
-                <Label htmlFor="fee">Compenso totale (opz.)</Label>
+                <Label htmlFor="fee">
+                  {isGiveaway ? "Compenso in denaro (opz.)" : "Compenso totale (opz.)"}
+                </Label>
                 <Input
                   id="fee"
                   name="agreedFee"
@@ -328,10 +345,15 @@ export function CreateCollaborationDialog({
                   value={agreedFee}
                   onChange={(e) => setAgreedFee(e.target.value)}
                   inputMode="decimal"
-                  placeholder="1200,50"
+                  placeholder={isGiveaway ? "0 per giveaway puro" : "1200,50"}
                   autoComplete="off"
                   disabled={pending}
                 />
+                {isGiveaway && (
+                  <p className="text-xs text-gray-500">
+                    Se il deal prevede solo prodotti senza denaro, lascia vuoto.
+                  </p>
+                )}
               </div>
             )}
 
@@ -363,12 +385,14 @@ export function CreateCollaborationDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="fee-pc">Compenso per singolo contenuto *</Label>
+                    <Label htmlFor="fee-pc">
+                      Compenso per singolo contenuto {isGiveaway ? "(opz.)" : "*"}
+                    </Label>
                     <Input
                       id="fee-pc"
                       type="text"
                       inputMode="decimal"
-                      placeholder="200"
+                      placeholder={isGiveaway ? "0 per giveaway puro" : "200"}
                       value={feePerContent}
                       onChange={(e) => setFeePerContent(e.target.value)}
                       autoComplete="off"
@@ -383,7 +407,63 @@ export function CreateCollaborationDialog({
                 >
                   <p className="text-xs font-medium text-gray-500">Totale contrattuale</p>
                   <p className="text-lg font-semibold tabular-nums text-gray-900">
-                    {formatEur(periodicTotal)}
+                    {periodicTotal > 0 ? formatEur(periodicTotal) : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-2xl border-0 bg-gray-100/60 px-4 py-3"
+              )}
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                  <Gift className="size-4 text-blue-500" />
+                  Giveaway / scambio prodotti
+                </p>
+                <p className="text-xs text-gray-500">
+                  Attiva se il brand ti invia un prodotto o servizio (anche oltre al compenso).
+                </p>
+              </div>
+              <Switch
+                checked={isGiveaway}
+                onCheckedChange={setIsGiveaway}
+                disabled={pending}
+                aria-label="Giveaway / scambio prodotti"
+              />
+            </div>
+
+            {isGiveaway && (
+              <div className="space-y-3 rounded-2xl bg-white/50 p-3 sm:p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="giveaway-d">Cosa ricevi *</Label>
+                  <Textarea
+                    id="giveaway-d"
+                    rows={2}
+                    placeholder="Es. PS5 Pro + 2 controller DualSense, valore €700"
+                    value={giveawayDetails}
+                    onChange={(e) => setGiveawayDetails(e.target.value)}
+                    className="min-h-[72px] resize-y"
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="giveaway-v">Valore stimato € (opz.)</Label>
+                  <Input
+                    id="giveaway-v"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="700"
+                    value={giveawayValue}
+                    onChange={(e) => setGiveawayValue(e.target.value)}
+                    autoComplete="off"
+                    disabled={pending}
+                    className="rounded-xl"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Solo per le tue statistiche personali — non confluisce nelle entrate.
                   </p>
                 </div>
               </div>

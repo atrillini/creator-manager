@@ -25,6 +25,10 @@ export type CreateCollaborationInput = {
   isPeriodic: boolean;
   contentCount?: number;
   feePerContent?: string;
+  /** Giveaway / scambio prodotti (può convivere con un compenso, anche parziale). */
+  isGiveaway?: boolean;
+  giveawayDetails?: string;
+  giveawayValue?: string;
   /** Opzionale: solo righe con data valida vengono inserite; il resto si aggiunge dalla scheda. */
   plannedDeliverables?: PlannedDeliverableInput[];
   /** Opzionale: nota iniziale in timeline (es. brief incollato + link). */
@@ -137,6 +141,19 @@ export async function createCollaboration(
   const url = (input.contractUrl ?? "").trim();
   const contractUrl = url ? url : null;
 
+  const isGiveaway = input.isGiveaway === true;
+  const giveawayDetails = isGiveaway
+    ? (input.giveawayDetails ?? "").trim().slice(0, 4000) || null
+    : null;
+  let giveawayValue: number | null = null;
+  if (isGiveaway && (input.giveawayValue ?? "").trim() !== "") {
+    const gv = parseFee(input.giveawayValue ?? "");
+    if (!gv.ok) {
+      return { ok: false, error: "Valore stimato giveaway non valido" };
+    }
+    giveawayValue = gv.value > 0 ? gv.value : null;
+  }
+
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
 
   if (input.isPeriodic) {
@@ -148,13 +165,13 @@ export async function createCollaboration(
     if (!fpcP.ok) {
       return { ok: false, error: "Compenso per contenuto non valido" };
     }
-    if (fpcP.value <= 0) {
+    if (!isGiveaway && fpcP.value <= 0) {
       return { ok: false, error: "Inserisci un compenso per singolo contenuto" };
     }
 
     const planned = filterValidPlanned(input.plannedDeliverables);
 
-    const totalFee = n * fpcP.value;
+    const totalFee = fpcP.value > 0 ? n * fpcP.value : null;
 
     const { data, error } = await supabase
       .from("collaborations")
@@ -167,7 +184,10 @@ export async function createCollaboration(
         contract_url: contractUrl,
         is_periodic: true,
         content_count: n,
-        fee_per_content: fpcP.value,
+        fee_per_content: fpcP.value > 0 ? fpcP.value : null,
+        is_giveaway: isGiveaway,
+        giveaway_details: giveawayDetails,
+        giveaway_value: giveawayValue,
       })
       .select("id")
       .single();
@@ -214,6 +234,9 @@ export async function createCollaboration(
       is_periodic: false,
       content_count: null,
       fee_per_content: null,
+      is_giveaway: isGiveaway,
+      giveaway_details: giveawayDetails,
+      giveaway_value: giveawayValue,
     })
     .select("id")
     .single();

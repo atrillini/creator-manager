@@ -14,6 +14,8 @@ export type MockCollaboration = {
   title: string;
   brandName: string;
   agreedFee: string | null;
+  isGiveaway?: boolean;
+  giveawayValue?: string | null;
   kanbanStatus: KanbanStatus;
 };
 

@@ -56,6 +56,7 @@ import {
   CheckCircle2,
   Download,
   Euro,
+  Gift,
   Loader2,
   Pencil,
   PenLine,
@@ -749,13 +750,38 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                   </span>
                 </div>
                 <span className="text-lg font-semibold tabular-nums text-gray-900">
-                  {collab.agreed_fee ?? "—"}
+                  {collab.agreed_fee ?? (collab.is_giveaway ? "Giveaway" : "—")}
                 </span>
               </div>
               {collab.is_periodic && collab.fee_per_content && (
                 <p className="text-xs text-gray-500">
                   Compenso per singolo contenuto: {collab.fee_per_content}
                 </p>
+              )}
+              {collab.is_giveaway && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Gift className="size-4" />
+                    <span className="text-xs font-medium uppercase tracking-wide">
+                      Giveaway / scambio prodotti
+                    </span>
+                  </div>
+                  {collab.giveaway_details ? (
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm text-gray-800">
+                      {collab.giveaway_details}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-sm text-gray-500">
+                      Nessuna descrizione inserita.
+                    </p>
+                  )}
+                  {collab.giveaway_value && (
+                    <p className="mt-1.5 text-xs text-gray-500">
+                      Valore stimato:{" "}
+                      <span className="font-medium text-gray-800">{collab.giveaway_value}</span>
+                    </p>
+                  )}
+                </div>
               )}
               {collab.contract_url && (
                 <a

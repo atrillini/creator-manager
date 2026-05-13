@@ -16,6 +16,9 @@ type Draft = {
   isPeriodic?: boolean;
   contentCount?: number;
   feePerContent?: string;
+  isGiveaway?: boolean;
+  giveawayDetails?: string;
+  giveawayValue?: string;
   plannedDeliverables?: { type: string; publishDate: string }[];
   initialTimelineNote?: string;
   initialPayments?: { amount: string; paidAt: string; note?: string }[];

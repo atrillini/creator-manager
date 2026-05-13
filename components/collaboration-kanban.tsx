@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
-import { GripVertical } from "lucide-react";
+import { Gift, GripVertical } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 
 const COL_PREFIX = "col-";
@@ -111,6 +111,12 @@ function DraggableRow({ c, droppableId }: { c: MockCollaboration; droppableId: s
               {c.agreedFee}
             </p>
           )}
+          {c.isGiveaway && (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700">
+              <Gift className="size-2.5" />
+              {c.giveawayValue ? `Giveaway · ${c.giveawayValue}` : "Giveaway"}
+            </p>
+          )}
         </Link>
       </div>
     </div>
@@ -128,6 +134,12 @@ function KanbanCardPreview({ c }: { c: MockCollaboration }) {
       {c.agreedFee ? (
         <p className="mt-0.5 text-[10px] font-medium tabular-nums text-gray-800">
           {c.agreedFee}
+        </p>
+      ) : null}
+      {c.isGiveaway ? (
+        <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700">
+          <Gift className="size-2.5" />
+          {c.giveawayValue ? `Giveaway · ${c.giveawayValue}` : "Giveaway"}
         </p>
       ) : null}
     </div>

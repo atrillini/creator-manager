@@ -55,6 +55,9 @@ type AnalyzeResponse =
       analysis: {
         brand_name: string;
         agreed_fee: number | null;
+        is_giveaway?: boolean;
+        giveaway_details?: string | null;
+        giveaway_value?: number | null;
         deliverables: { type: string; publish_date: string | null }[];
       };
     }
@@ -67,6 +70,9 @@ type Draft = {
   isPeriodic?: boolean;
   contentCount?: number;
   feePerContent?: string;
+  isGiveaway?: boolean;
+  giveawayDetails?: string;
+  giveawayValue?: string;
   plannedDeliverables?: { type: string; publishDate: string }[];
   initialTimelineNote?: string;
 };
@@ -432,6 +438,12 @@ export function InboxCollaborazioniView({ brands }: Props) {
         brandId: pickBrandIdByName(brands, data.analysis.brand_name),
         briefText: email.subject,
         agreedFee: data.analysis.agreed_fee == null ? "" : String(data.analysis.agreed_fee),
+        isGiveaway: data.analysis.is_giveaway === true,
+        giveawayDetails: data.analysis.giveaway_details ?? "",
+        giveawayValue:
+          data.analysis.giveaway_value == null
+            ? ""
+            : String(data.analysis.giveaway_value),
         plannedDeliverables,
         initialTimelineNote: `Email convertita da Inbox Collaborazioni:\n\nDa: ${email.from}\nOggetto: ${email.subject}\nData: ${formatDate(email.date)}\n\n${textForAi}`,
       };

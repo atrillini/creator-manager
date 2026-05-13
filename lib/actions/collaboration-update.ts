@@ -16,6 +16,9 @@ export type UpdateCollaborationInput = {
   contentCount?: number;
   feePerContent?: string;
   agreedFee: string;
+  isGiveaway?: boolean;
+  giveawayDetails?: string;
+  giveawayValue?: string;
 };
 
 function isStatus(s: string): s is CollabStatus {
@@ -41,6 +44,20 @@ export async function updateCollaboration(
 
   const url = (input.contractUrl ?? "").trim();
   const contractUrl = url ? url : null;
+
+  const isGiveaway = input.isGiveaway === true;
+  const giveawayDetails = isGiveaway
+    ? (input.giveawayDetails ?? "").trim().slice(0, 4000) || null
+    : null;
+  let giveawayValue: number | null = null;
+  if (isGiveaway && (input.giveawayValue ?? "").trim() !== "") {
+    const gv = parseFee(input.giveawayValue ?? "");
+    if (!gv.ok) {
+      return { ok: false, error: "Valore stimato giveaway non valido" };
+    }
+    giveawayValue = gv.value > 0 ? gv.value : null;
+  }
+
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
 
   if (input.isPeriodic) {
@@ -52,10 +69,10 @@ export async function updateCollaboration(
     if (!fpcP.ok) {
       return { ok: false, error: "Compenso per contenuto non valido" };
     }
-    if (fpcP.value <= 0) {
+    if (!isGiveaway && fpcP.value <= 0) {
       return { ok: false, error: "Inserisci un compenso per singolo contenuto" };
     }
-    const totalFee = n * fpcP.value;
+    const totalFee = fpcP.value > 0 ? n * fpcP.value : null;
 
     const { error } = await supabase
       .from("collaborations")
@@ -67,7 +84,10 @@ export async function updateCollaboration(
         agreed_fee: totalFee,
         is_periodic: true,
         content_count: n,
-        fee_per_content: fpcP.value,
+        fee_per_content: fpcP.value > 0 ? fpcP.value : null,
+        is_giveaway: isGiveaway,
+        giveaway_details: giveawayDetails,
+        giveaway_value: giveawayValue,
       })
       .eq("id", input.collaborationId)
       .eq("user_id", userId);
@@ -96,6 +116,9 @@ export async function updateCollaboration(
       is_periodic: false,
       content_count: null,
       fee_per_content: null,
+      is_giveaway: isGiveaway,
+      giveaway_details: giveawayDetails,
+      giveaway_value: giveawayValue,
     })
     .eq("id", input.collaborationId)
     .eq("user_id", userId);

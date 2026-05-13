@@ -55,6 +55,12 @@ export type CollaborationDetail = {
   content_count: number | null;
   fee_per_content: string | null;
   fee_per_content_value: number | null;
+  /** Giveaway / scambio prodotti (può convivere con un compenso parziale). */
+  is_giveaway: boolean;
+  giveaway_details: string | null;
+  /** Valore € formattato dei beni ricevuti (solo statistico, non entra nei pagamenti). */
+  giveaway_value: string | null;
+  giveaway_value_amount: number | null;
   brand: BrandLite | null;
   events: CollaborationEventRow[];
   deliverables: DeliverableRow[];
@@ -89,6 +95,9 @@ type CollaborationRow = {
   is_periodic: boolean | null;
   content_count: number | null;
   fee_per_content: number | string | null;
+  is_giveaway: boolean | null;
+  giveaway_details: string | null;
+  giveaway_value: number | string | null;
   brands: BrandsJoin | BrandsJoin[] | null;
 };
 
@@ -153,6 +162,7 @@ export async function getCollaborationDetail(
     .select(
       `id, general_notes, agreed_fee, brief_text, status, contract_url, created_at, paid_at,
       is_periodic, content_count, fee_per_content,
+      is_giveaway, giveaway_details, giveaway_value,
       brands ( id, name, sector, contacts, contacts_json, notes )`
     )
     .eq("id", id)
@@ -219,6 +229,9 @@ export async function getCollaborationDetail(
   const fpcRaw = toNumericOrNull(
     collab.fee_per_content as number | string | null
   );
+  const giveawayValueRaw = toNumericOrNull(
+    collab.giveaway_value as number | string | null
+  );
   const payments = (pays ?? []) as CollaborationPaymentRow[];
   const paidTotal = payments.reduce((acc, p) => acc + Number(p.amount ?? 0), 0);
   const remainingDue = agreedRaw == null ? null : Math.max(0, agreedRaw - paidTotal);
@@ -244,6 +257,10 @@ export async function getCollaborationDetail(
       collab.fee_per_content as number | string | null
     ),
     fee_per_content_value: fpcRaw,
+    is_giveaway: collab.is_giveaway === true,
+    giveaway_details: collab.giveaway_details ?? null,
+    giveaway_value: toMoney(collab.giveaway_value as number | string | null),
+    giveaway_value_amount: giveawayValueRaw,
     brand: normalizeBrand(collab),
     events: eventRows,
     deliverables: (deliv ?? []) as DeliverableRow[],

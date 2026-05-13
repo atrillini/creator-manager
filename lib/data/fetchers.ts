@@ -7,6 +7,8 @@ type CollabRow = {
   status: string;
   agreed_fee: number | string | null;
   brief_text: string | null;
+  is_giveaway: boolean | null;
+  giveaway_value: number | string | null;
   brands: { name: string } | { name: string }[] | null;
 };
 
@@ -39,7 +41,9 @@ export async function getCollaborations() {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("collaborations")
-    .select("id, status, agreed_fee, brief_text, brands ( name )")
+    .select(
+      "id, status, agreed_fee, brief_text, is_giveaway, giveaway_value, brands ( name )"
+    )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -59,6 +63,8 @@ export async function getCollaborations() {
       title: c.brief_text?.trim() || "Senza titolo",
       brandName: brandName(c.brands),
       agreedFee: feeString(c.agreed_fee),
+      isGiveaway: c.is_giveaway === true,
+      giveawayValue: feeString(c.giveaway_value),
       kanbanStatus: mapStatusToKanban(s),
     };
   });

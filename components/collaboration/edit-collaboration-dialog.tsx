@@ -28,7 +28,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Gift, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import type { BrandOption } from "@/components/collaborazioni/create-collaboration-dialog";
@@ -74,6 +74,11 @@ export function EditCollaborationDialog({
   const [agreedFee, setAgreedFee] = useState(
     numberToItalianInput(data.agreed_fee_value)
   );
+  const [isGiveaway, setIsGiveaway] = useState(data.is_giveaway);
+  const [giveawayDetails, setGiveawayDetails] = useState(data.giveaway_details ?? "");
+  const [giveawayValue, setGiveawayValue] = useState(
+    numberToItalianInput(data.giveaway_value_amount)
+  );
   const formId = useId();
 
   useEffect(() => {
@@ -87,6 +92,9 @@ export function EditCollaborationDialog({
     setContentCount(data.content_count ?? 1);
     setFeePerContent(numberToItalianInput(data.fee_per_content_value));
     setAgreedFee(numberToItalianInput(data.agreed_fee_value));
+    setIsGiveaway(data.is_giveaway);
+    setGiveawayDetails(data.giveaway_details ?? "");
+    setGiveawayValue(numberToItalianInput(data.giveaway_value_amount));
   }, [open, data, brands]);
 
   const periodicTotal = useMemo(() => {
@@ -116,6 +124,9 @@ export function EditCollaborationDialog({
           contentCount: isPeriodic ? contentCount : undefined,
           feePerContent: isPeriodic ? feePerContent : undefined,
           agreedFee: isPeriodic ? "" : agreedFee,
+          isGiveaway,
+          giveawayDetails: isGiveaway ? giveawayDetails : undefined,
+          giveawayValue: isGiveaway ? giveawayValue : undefined,
         });
         if (!res.ok) {
           setErr(res.error);
@@ -226,18 +237,23 @@ export function EditCollaborationDialog({
             {!isPeriodic && (
               <div className="space-y-2">
                 <Label htmlFor={`${formId}-fee`} className="text-gray-700">
-                  Compenso totale (opz.)
+                  {isGiveaway ? "Compenso in denaro (opz.)" : "Compenso totale (opz.)"}
                 </Label>
                 <Input
                   id={`${formId}-fee`}
                   value={agreedFee}
                   onChange={(e) => setAgreedFee(e.target.value)}
                   inputMode="decimal"
-                  placeholder="1200,50"
+                  placeholder={isGiveaway ? "0 per giveaway puro" : "1200,50"}
                   autoComplete="off"
                   disabled={pending}
                   className="border-gray-200 bg-white text-gray-900"
                 />
+                {isGiveaway && (
+                  <p className="text-xs text-gray-500">
+                    Se il deal prevede solo prodotti senza denaro, lascia vuoto.
+                  </p>
+                )}
               </div>
             )}
 
@@ -267,13 +283,14 @@ export function EditCollaborationDialog({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor={`${formId}-fpc`} className="text-gray-700">
-                      Compenso per singolo contenuto *
+                      Compenso per singolo contenuto {isGiveaway ? "(opz.)" : "*"}
                     </Label>
                     <Input
                       id={`${formId}-fpc`}
                       value={feePerContent}
                       onChange={(e) => setFeePerContent(e.target.value)}
                       inputMode="decimal"
+                      placeholder={isGiveaway ? "0 per giveaway puro" : ""}
                       disabled={pending}
                       className="rounded-xl border border-gray-200 bg-white text-gray-900"
                     />
@@ -285,7 +302,66 @@ export function EditCollaborationDialog({
                 >
                   <p className="text-xs font-medium text-gray-500">Totale contrattuale</p>
                   <p className="text-lg font-semibold tabular-nums text-gray-900">
-                    {formatEur(periodicTotal)}
+                    {periodicTotal > 0 ? formatEur(periodicTotal) : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3"
+              )}
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                  <Gift className="size-4 text-blue-500" />
+                  Giveaway / scambio prodotti
+                </p>
+                <p className="text-xs text-gray-500">
+                  Attiva se il brand ti invia un prodotto o servizio (anche oltre al compenso).
+                </p>
+              </div>
+              <Switch
+                checked={isGiveaway}
+                onCheckedChange={setIsGiveaway}
+                disabled={pending}
+                aria-label="Giveaway / scambio prodotti"
+              />
+            </div>
+
+            {isGiveaway && (
+              <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 sm:p-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-gd`} className="text-gray-700">
+                    Cosa ricevi *
+                  </Label>
+                  <Textarea
+                    id={`${formId}-gd`}
+                    rows={2}
+                    value={giveawayDetails}
+                    onChange={(e) => setGiveawayDetails(e.target.value)}
+                    placeholder="Es. PS5 Pro + 2 controller DualSense"
+                    className="min-h-[72px] resize-y border border-gray-200 bg-white text-gray-900"
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-gv`} className="text-gray-700">
+                    Valore stimato € (opz.)
+                  </Label>
+                  <Input
+                    id={`${formId}-gv`}
+                    value={giveawayValue}
+                    onChange={(e) => setGiveawayValue(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="700"
+                    autoComplete="off"
+                    disabled={pending}
+                    className="rounded-xl border border-gray-200 bg-white text-gray-900"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Solo per le tue statistiche personali — non confluisce nelle entrate.
                   </p>
                 </div>
               </div>
