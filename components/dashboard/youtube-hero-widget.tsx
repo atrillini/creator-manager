@@ -2,8 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import type { YoutubeStatsRow } from "@/lib/data/fetchers";
-import { Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { Loader2, RefreshCcw } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 type Props = { initial: YoutubeStatsRow | null };
 
@@ -20,6 +20,24 @@ export function YouTubeHeroWidget({ initial }: Props) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (pending) {
+      const startedAt = Date.now();
+      setElapsedMs(0);
+      tickRef.current = setInterval(() => {
+        setElapsedMs(Date.now() - startedAt);
+      }, 250);
+    } else {
+      if (tickRef.current) clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, [pending]);
 
   const onSync = () => {
     setSyncError(null);
@@ -59,8 +77,13 @@ export function YouTubeHeroWidget({ initial }: Props) {
     });
   };
 
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
   return (
-    <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6">
+    <section
+      aria-busy={pending}
+      className="relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {stats?.avatarUrl ? (
@@ -85,17 +108,20 @@ export function YouTubeHeroWidget({ initial }: Props) {
         <Button
           type="button"
           variant="outline"
-          className="rounded-full border-gray-200 text-xs"
+          className="gap-1.5 rounded-full border-gray-200 text-xs"
           onClick={onSync}
           disabled={pending}
         >
           {pending ? (
             <>
               <Loader2 className="size-3.5 animate-spin" />
-              Sync...
+              Sync in corso…
             </>
           ) : (
-            "Sync"
+            <>
+              <RefreshCcw className="size-3.5" />
+              Sync
+            </>
           )}
         </Button>
       </div>
@@ -115,6 +141,22 @@ export function YouTubeHeroWidget({ initial }: Props) {
       </div>
       {syncError ? <p className="mt-3 text-xs text-red-600">{syncError}</p> : null}
       {syncWarning ? <p className="mt-2 text-xs text-amber-600">{syncWarning}</p> : null}
+      {pending ? (
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-3xl bg-white/75 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="size-6 animate-spin text-blue-500" />
+          <p className="text-sm font-medium text-gray-800">
+            Sincronizzazione YouTube in corso…
+          </p>
+          <p className="text-xs text-gray-500">
+            Recupero iscritti, visualizzazioni e ricavi stimati
+            {elapsedSeconds > 0 ? ` · ${elapsedSeconds}s` : ""}
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

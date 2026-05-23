@@ -1,58 +1,42 @@
 import { DashboardHeader } from "@/components/dashboard-header";
+import { DashboardMonthSummary } from "@/components/dashboard/dashboard-month-summary";
+import { DashboardPriorityGrid } from "@/components/dashboard/dashboard-priority-grid";
+import { DashboardTopBrands } from "@/components/dashboard/dashboard-top-brands";
+import { DashboardTrendCard } from "@/components/dashboard/dashboard-trend-card";
 import { YouTubeHeroWidget } from "@/components/dashboard/youtube-hero-widget";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDashboardStats, getLatestYoutubeStats } from "@/lib/data/fetchers";
-import { Calendar, Euro, ListTodo } from "lucide-react";
+import { getDashboardOverview } from "@/lib/data/dashboard";
+import { getLatestYoutubeStats } from "@/lib/data/fetchers";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [stats, yt] = await Promise.all([getDashboardStats(), getLatestYoutubeStats()]);
+  const year = new Date().getFullYear();
+  const [overview, yt] = await Promise.all([
+    getDashboardOverview(),
+    getLatestYoutubeStats(),
+  ]);
 
   return (
-    <div>
+    <div className="space-y-8">
       <DashboardHeader
         title="Dashboard"
-        description="Riepilogo collaborazioni, scadenze e andamento economico. Dati fittizi per l’anteprima."
+        description="Cosa fare oggi, andamento del mese e pipeline — dati dal tuo CRM."
       />
-      <div className="ui-enter mb-4">
-        <YouTubeHeroWidget initial={yt} />
-      </div>
-      <div className="ui-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900">Collaborazioni aperte</CardTitle>
-            <ListTodo className="size-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold tabular-nums text-gray-900">
-              {stats.openCollaborations}
-            </p>
-            <p className="text-xs text-gray-500">Board non completate</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900">Mese in corso</CardTitle>
-            <Euro className="size-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold tabular-nums text-gray-900">
-              {stats.thisMonthEarnings}
-            </p>
-            <p className="text-xs text-gray-500">Ricavi stimati</p>
-          </CardContent>
-        </Card>
-        <Card className="sm:col-span-2 lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900">Prossima scadenza</CardTitle>
-            <Calendar className="size-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold text-gray-900">
-              {stats.nextDeadline.label}
-            </p>
-            <p className="text-sm text-gray-500">{stats.nextDeadline.when}</p>
-          </CardContent>
-        </Card>
+
+      <div className="ui-enter space-y-8">
+        <DashboardPriorityGrid data={overview.priorities} />
+        <DashboardMonthSummary data={overview.month} />
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold tracking-tight text-gray-900">Andamento</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DashboardTrendCard points={overview.trend12m} />
+            <DashboardTopBrands brands={overview.topBrands} year={year} />
+          </div>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold tracking-tight text-gray-900">YouTube</h2>
+          <YouTubeHeroWidget initial={yt} />
+        </section>
       </div>
     </div>
   );
