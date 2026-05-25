@@ -4,7 +4,6 @@ import {
 } from "@/lib/data/dashboard";
 import { DashboardStatLink } from "@/components/dashboard/dashboard-stat-link";
 import { Calendar, Clock, Gift, Wallet } from "lucide-react";
-import Link from "next/link";
 
 type Props = { data: DashboardOverview["priorities"] };
 
@@ -52,16 +51,10 @@ export function DashboardPriorityGrid({ data }: Props) {
           {data.staleResponse.items.length > 0 ? (
             <ul className="space-y-1.5">
               {data.staleResponse.items.map((s) => (
-                <li key={s.id}>
-                  <Link
-                    href={`/collaborations/${s.id}`}
-                    className="block text-xs text-gray-600 hover:text-blue-600"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="font-medium text-gray-800">{s.brandName}</span>
-                    {" · "}
-                    {s.daysStale}g · {s.status}
-                  </Link>
+                <li key={s.id} className="text-xs text-gray-600">
+                  <span className="font-medium text-gray-800">{s.brandName}</span>
+                  {" · "}
+                  {s.daysStale}g · {s.status}
                 </li>
               ))}
             </ul>
@@ -84,17 +77,11 @@ export function DashboardPriorityGrid({ data }: Props) {
           {data.overduePayments.items.length > 0 ? (
             <ul className="space-y-1.5">
               {data.overduePayments.items.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={`/collaborations/${p.id}`}
-                    className="flex justify-between gap-2 text-xs text-gray-600 hover:text-blue-600"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="line-clamp-1">{p.title}</span>
-                    <span className="shrink-0 font-medium tabular-nums text-gray-800">
-                      {formatDashboardEur(p.remaining)}
-                    </span>
-                  </Link>
+                <li key={p.id} className="flex justify-between gap-2 text-xs text-gray-600">
+                  <span className="line-clamp-1">{p.title}</span>
+                  <span className="shrink-0 font-medium tabular-nums text-gray-800">
+                    {formatDashboardEur(p.remaining)}
+                  </span>
                 </li>
               ))}
             </ul>
