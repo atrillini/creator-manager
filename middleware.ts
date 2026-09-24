@@ -14,6 +14,7 @@ const PROTECTED_PREFIXES = [
   "/calendario",
   "/calendar",
   "/aziende",
+  "/ricevute",
 ];
 
 function isProtectedPath(pathname: string) {
@@ -82,5 +83,6 @@ export const config = {
     "/calendario/:path*",
     "/calendar/:path*",
     "/aziende/:path*",
+    "/ricevute/:path*",
   ],
 };

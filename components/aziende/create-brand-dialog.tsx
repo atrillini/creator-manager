@@ -1,6 +1,8 @@
 "use client";
 
 import { createBrand } from "@/lib/actions/brand";
+import { emptyBrandBilling, type BrandBilling } from "@/lib/brand-billing";
+import { BrandBillingFields } from "@/components/aziende/brand-billing-fields";
 import {
   emptyBrandContact,
   type BrandContact,
@@ -29,6 +31,7 @@ export function CreateBrandDialog() {
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [people, setPeople] = useState<BrandContact[]>([emptyBrandContact()]);
+  const [billing, setBilling] = useState<BrandBilling>(emptyBrandBilling);
   const nameId = useId();
 
   function setPerson(
@@ -67,6 +70,7 @@ export function CreateBrandDialog() {
           sector,
           contactPeople: people,
           notes,
+          billing,
         });
         if (!res.ok) {
           setErr(res.error);
@@ -75,6 +79,7 @@ export function CreateBrandDialog() {
         setOpen(false);
         form.reset();
         setPeople([emptyBrandContact()]);
+        setBilling(emptyBrandBilling());
         router.refresh();
       })();
     });
@@ -225,6 +230,8 @@ export function CreateBrandDialog() {
               ))}
             </ul>
           </div>
+
+          <BrandBillingFields value={billing} onChange={setBilling} disabled={pending} />
 
           <div className="space-y-2">
             <Label htmlFor="brand-notes" className="text-gray-700">

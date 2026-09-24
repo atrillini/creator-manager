@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { brandBillingToRow, type BrandBilling } from "@/lib/brand-billing";
 import {
   formatContactsSummaryLine,
   type BrandContact,
@@ -14,6 +15,8 @@ export type CreateBrandInput = {
   /** Rubrica: uno o più referenti. */
   contactPeople: BrandContact[];
   notes?: string;
+  /** Intestazione ricevute (opzionale: se assente non viene toccata). */
+  billing?: BrandBilling;
 };
 
 export type UpdateBrandInput = CreateBrandInput & { id: string };
@@ -44,6 +47,7 @@ export async function createBrand(
       contacts: line || null,
       contacts_json: people,
       notes: input.notes?.trim() || null,
+      ...brandBillingToRow(input.billing),
     })
     .select("id")
     .single();
@@ -89,6 +93,7 @@ export async function updateBrand(
       contacts: line || null,
       contacts_json: people,
       notes: input.notes?.trim() || null,
+      ...brandBillingToRow(input.billing),
     })
     .eq("id", input.id)
     .eq("user_id", userId)
@@ -122,5 +127,6 @@ export async function updateBrand(
   revalidatePath("/dashboard");
   revalidatePath("/calendario");
   revalidatePath("/calendar");
+  revalidatePath("/ricevute");
   return { ok: true };
 }

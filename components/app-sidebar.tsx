@@ -9,6 +9,7 @@ import {
   ListTodo,
   Menu,
   Calendar,
+  ReceiptText,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -25,6 +26,7 @@ const items = [
   { href: "/calendario", label: "Calendario", icon: Calendar },
   { href: "/aziende", label: "Aziende", icon: Building2 },
   { href: "/finanze", label: "Finanze", icon: Banknote },
+  { href: "/ricevute", label: "Ricevute", icon: ReceiptText },
 ];
 
 export function AppSidebar() {

@@ -1,6 +1,7 @@
 import { CollaborationWorkspace } from "@/components/collaboration/collaboration-workspace";
 import { getCollaborationDetail } from "@/lib/data/collaboration-detail";
 import { getBrands } from "@/lib/data/fetchers";
+import { getReceiptsForCollaboration } from "@/lib/data/receipts";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -27,9 +28,10 @@ function mergeBrandOptions(
 
 export default async function CollaborationDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [result, allBrands] = await Promise.all([
+  const [result, allBrands, receipts] = await Promise.all([
     getCollaborationDetail(id),
     getBrands(),
+    getReceiptsForCollaboration(id),
   ]);
 
   if (!result.ok) {
@@ -55,6 +57,7 @@ export default async function CollaborationDetailPage({ params }: PageProps) {
       key={result.data.id}
       data={result.data}
       brandOptions={mergeBrandOptions(result.data, allBrands)}
+      receipts={receipts}
     />
   );
 }

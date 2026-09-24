@@ -126,6 +126,11 @@ export type BrandRow = {
   /** Rubrica strutturata (JSON), se la migration è applicata */
   contacts_json: unknown;
   notes: string | null;
+  billing_name?: string | null;
+  billing_address?: string | null;
+  vat_number?: string | null;
+  billing_extra?: string | null;
+  receipt_language?: string | null;
 };
 
 export type BrandCollabLink = {
@@ -144,7 +149,9 @@ export async function getBrands(): Promise<BrandRow[]> {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("brands")
-    .select("id, name, sector, contacts, contacts_json, notes")
+    .select(
+      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language"
+    )
     .eq("user_id", userId)
     .order("name", { ascending: true });
   if (error) {
@@ -165,7 +172,9 @@ export async function getAziendeTableBrands(): Promise<AziendeBrandRow[]> {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data: brands, error: brandsError } = await supabase
     .from("brands")
-    .select("id, name, sector, contacts, contacts_json, notes")
+    .select(
+      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language"
+    )
     .eq("user_id", userId)
     .order("name", { ascending: true });
 

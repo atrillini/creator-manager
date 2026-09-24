@@ -40,3 +40,6 @@ env.local.p
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# documenti fiscali personali (ricevute originali)
+/docs/

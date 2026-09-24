@@ -6,7 +6,9 @@ import {
   parseContactsJson,
   type BrandContact,
 } from "@/lib/brand-contacts";
+import { brandBillingFromRow, type BrandBilling } from "@/lib/brand-billing";
 import type { BrandRow } from "@/lib/data/fetchers";
+import { BrandBillingFields } from "@/components/aziende/brand-billing-fields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +37,7 @@ export function EditBrandDialog({ brand }: Props) {
   const [sector, setSector] = useState(brand.sector ?? "");
   const [notes, setNotes] = useState(brand.notes ?? "");
   const [people, setPeople] = useState<BrandContact[]>([emptyBrandContact()]);
+  const [billing, setBilling] = useState<BrandBilling>(() => brandBillingFromRow(brand));
   const nameId = useId();
 
   useEffect(() => {
@@ -44,6 +47,7 @@ export function EditBrandDialog({ brand }: Props) {
     setNotes(brand.notes ?? "");
     const parsed = parseContactsJson(brand.contacts_json);
     setPeople(parsed.length > 0 ? parsed : [emptyBrandContact()]);
+    setBilling(brandBillingFromRow(brand));
     setErr(null);
   }, [open, brand]);
 
@@ -76,6 +80,7 @@ export function EditBrandDialog({ brand }: Props) {
           sector,
           contactPeople: people,
           notes,
+          billing,
         });
         if (!res.ok) {
           setErr(res.error);
@@ -239,6 +244,8 @@ export function EditBrandDialog({ brand }: Props) {
                 ))}
               </ul>
             </div>
+
+            <BrandBillingFields value={billing} onChange={setBilling} disabled={pending} />
 
             <div className="space-y-2">
               <Label htmlFor="edit-brand-notes" className="text-gray-700">

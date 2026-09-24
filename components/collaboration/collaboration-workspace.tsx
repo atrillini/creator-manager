@@ -48,6 +48,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { EditTimelineEventDialog } from "@/components/collaboration/edit-timeline-event-dialog";
 import { EditCollaborationDialog } from "@/components/collaboration/edit-collaboration-dialog";
 import type { BrandOption } from "@/components/collaborazioni/create-collaboration-dialog";
+import type { ReceiptRow } from "@/lib/data/receipts";
+import { RECEIPT_STATUS_LABELS, formatReceiptNumber } from "@/lib/receipts/model";
 import {
   Activity,
   ArrowLeft,
@@ -60,6 +62,7 @@ import {
   Loader2,
   Pencil,
   PenLine,
+  ReceiptText,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -121,9 +124,9 @@ function toLocalInputDateTimeValue(d: Date) {
   return new Date(t).toISOString().slice(0, 16);
 }
 
-type Props = { data: CollaborationDetail; brandOptions: BrandOption[] };
+type Props = { data: CollaborationDetail; brandOptions: BrandOption[]; receipts: ReceiptRow[] };
 
-export function CollaborationWorkspace({ data, brandOptions }: Props) {
+export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) {
   const collab = data;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -975,6 +978,53 @@ export function CollaborationWorkspace({ data, brandOptions }: Props) {
                   ))}
                 </ul>
               )}
+              <div className="space-y-2 rounded-xl border border-gray-100 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-gray-500">Ricevute</p>
+                  <Button asChild size="sm" variant="outline" className="h-7 gap-1 rounded-full px-2.5 text-xs">
+                    <Link href={`/ricevute?collaborazione=${collab.id}`}>
+                      <ReceiptText className="size-3.5" />
+                      Emetti ricevuta
+                    </Link>
+                  </Button>
+                </div>
+                {receipts.length === 0 ? (
+                  <p className="text-xs text-gray-400">Nessuna ricevuta collegata.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {receipts.map((r) => (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-600"
+                      >
+                        <span>
+                          <span className="font-mono text-gray-900">{formatReceiptNumber(r.number, r.year)}</span>
+                          {" · "}
+                          {new Date(r.issueDate + "T12:00:00").toLocaleDateString("it-IT")}
+                          {" · "}
+                          {RECEIPT_STATUS_LABELS[r.status]}
+                          {r.isLegacy ? " · legacy" : ""}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="font-medium text-gray-900">{eur(r.gross)}</span>
+                          {!r.isLegacy && (
+                            <a
+                              href={`/api/ricevute/${r.id}/pdf`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded p-1 text-gray-500 hover:bg-white hover:text-gray-900"
+                              aria-label="Apri PDF"
+                              title="Apri PDF"
+                            >
+                              <Download className="size-3.5" />
+                            </a>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </CardContent>
           </Card>
 
