@@ -154,14 +154,17 @@ export function YouTubeHeroWidget({ initial, google, oauthResult }: Props) {
           per non doverlo più rigenerare a mano.
         </p>
       ) : google.connected ? (
-        <p className="mt-3 text-[11px] text-gray-400">
+        <p className={google.renewSoon ? "mt-3 text-[11px] text-amber-700" : "mt-3 text-[11px] text-gray-400"}>
           Google{google.googleEmail ? ` · ${google.googleEmail}` : ""}
           {google.lastSyncAt
             ? ` · ultima sync ${new Date(google.lastSyncAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}`
             : ""}
+          {google.expiresAt
+            ? ` · scade il ${new Date(google.expiresAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}`
+            : ""}
           {" · "}
-          <a href={CONNECT_HREF} className="hover:text-gray-600 hover:underline">
-            Ricollega
+          <a href={CONNECT_HREF} className="font-medium hover:underline">
+            Rinnova
           </a>
         </p>
       ) : null}

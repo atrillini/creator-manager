@@ -29,6 +29,7 @@ npm run dev
 | `AI_MODEL_FAST`, `AI_MODEL_SMART` | Modelli OpenRouter (default `anthropic/claude-haiku-4.5`, `anthropic/claude-sonnet-5`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth Google (client di tipo "Applicazione web") |
 | `GOOGLE_REFRESH_TOKEN` | Legacy: fallback finché non si collega Google dalla dashboard |
+| `GOOGLE_TOKEN_TTL_DAYS` | Durata del token Google per gli avvisi di rinnovo (default 7 = app OAuth in "Testing"; `0` se l'app è pubblicata) |
 | `YOUTUBE_CHANNEL_ID`, `YOUTUBE_REVENUE_CURRENCY` | Opzionali (canale specifico, valuta ricavi; default EUR) |
 | `ICLOUD_EMAIL`, `ICLOUD_APP_PASSWORD` | Casella IMAP (password specifica per app di Apple) |
 | `COLLAB_EMAIL_ADDRESS` | Indirizzo delle collaborazioni (filtro lato server IMAP) |
@@ -41,9 +42,13 @@ I job schedulati (inbox ogni 15 minuti, YouTube ogni giorno) si configurano una 
 
 ## Google / YouTube
 
-Nella Google Cloud Console la schermata di consenso deve essere **In production** (in "Testing" i refresh token
-scadono dopo 7 giorni). Il client OAuth deve avere come redirect URI `<APP_URL>/api/google/callback`
-(e `http://localhost:3000/api/google/callback` per lo sviluppo). Poi, dalla dashboard: **Collega Google**.
+Il client OAuth (tipo "Applicazione web") deve avere come redirect URI `<APP_URL>/api/google/callback`
+(e `http://localhost:3000/api/google/callback` per lo sviluppo); il dominio va tra i "Domini autorizzati".
+Poi, dalla dashboard: **Collega Google**.
+
+Con l'app OAuth in modalità **Testing** (l'account Google deve essere tra i "Test users") Google fa scadere il
+token dopo 7 giorni: l'app mostra la scadenza nel widget YouTube e un banner "Rinnova ora" negli ultimi 2 giorni;
+il rinnovo è un click (nuovo consenso), senza toccare variabili d'ambiente né rifare il deploy.
 
 ## Inbox
 

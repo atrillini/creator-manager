@@ -34,6 +34,19 @@ export function appOrigin(request: Request) {
   return fromEnv || new URL(request.url).origin;
 }
 
+/**
+ * App OAuth in modalità "Testing": Google fa scadere il refresh token dopo 7 giorni.
+ * GOOGLE_TOKEN_TTL_DAYS=0 se l'app viene pubblicata (token senza scadenza).
+ */
+function tokenTtlDays() {
+  const raw = process.env.GOOGLE_TOKEN_TTL_DAYS?.trim();
+  const n = raw === undefined || raw === "" ? 7 : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Sotto questa soglia l'app mostra l'avviso di rinnovo. */
+const RENEW_WARNING_MS = 2 * 86_400_000;
+
 export type GoogleConnectionStatus = {
   connected: boolean;
   /** Collegamento tramite env GOOGLE_REFRESH_TOKEN (metodo vecchio). */
@@ -43,10 +56,15 @@ export type GoogleConnectionStatus = {
   /** Il token non è più valido: serve ricollegare. */
   needsReconnect: boolean;
   lastError: string | null;
+  /** Scadenza stimata del token (solo modalità Testing). */
+  expiresAt: string | null;
+  /** Scaduto o in scadenza entro 2 giorni: va rinnovato. */
+  renewSoon: boolean;
 };
 
 type ConnectionRow = {
   refresh_token: string;
+  connected_at: string;
   google_email: string | null;
   last_sync_at: string | null;
   last_error: string | null;
@@ -56,7 +74,7 @@ async function loadConnection(userId: string): Promise<ConnectionRow | null> {
   const admin = createSupabaseAdminClient();
   const { data } = await admin
     .from("google_connections")
-    .select("refresh_token, google_email, last_sync_at, last_error")
+    .select("refresh_token, connected_at, google_email, last_sync_at, last_error")
     .eq("user_id", userId)
     .maybeSingle<ConnectionRow>();
   return data ?? null;
@@ -65,13 +83,18 @@ async function loadConnection(userId: string): Promise<ConnectionRow | null> {
 export async function getGoogleConnectionStatus(userId: string): Promise<GoogleConnectionStatus> {
   const row = await loadConnection(userId).catch(() => null);
   const legacyEnv = !row && Boolean(process.env.GOOGLE_REFRESH_TOKEN);
+  const ttl = tokenTtlDays();
+  const expiresAtMs = row && ttl ? new Date(row.connected_at).getTime() + ttl * 86_400_000 : null;
+  const needsReconnect = row?.last_error === "invalid_grant";
   return {
     connected: Boolean(row) || legacyEnv,
     legacyEnv,
     googleEmail: row?.google_email ?? null,
     lastSyncAt: row?.last_sync_at ?? null,
-    needsReconnect: row?.last_error === "invalid_grant",
+    needsReconnect,
     lastError: row?.last_error ?? null,
+    expiresAt: expiresAtMs ? new Date(expiresAtMs).toISOString() : null,
+    renewSoon: needsReconnect || (expiresAtMs != null && expiresAtMs - Date.now() < RENEW_WARNING_MS),
   };
 }
 
