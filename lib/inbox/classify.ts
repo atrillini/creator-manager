@@ -253,7 +253,12 @@ async function loadContext(supabase: SupabaseClient, userId: string) {
   };
 }
 
-export type ClassifyResult = { analyzed: number; failed: number; remaining: boolean; skipped?: string };
+/** Errori temporanei: il thread resta "pending" invece di finire in errore. */
+function isRetryableAiError(message: string) {
+  return /OpenRouter (402|408|429|5\d\d)|timeout|aborted|fetch failed|ECONNRESET/i.test(message);
+}
+
+export type ClassifyResult ={ analyzed: number; failed: number; remaining: boolean; skipped?: string };
 
 /** Analizza i thread in coda (nuovi o con nuovi messaggi), i più recenti per primi. */
 export async function classifyPendingThreads(opts: {
@@ -305,8 +310,10 @@ export async function classifyPendingThreads(opts: {
   let failed = 0;
   const done: string[] = [];
 
+  let stopReason: string | undefined;
+
   const worker = async () => {
-    while (queue.length) {
+    while (queue.length && !stopReason) {
       if (Date.now() > opts.deadline) {
         remaining = true;
         return;
@@ -317,10 +324,17 @@ export async function classifyPendingThreads(opts: {
         analyzed += 1;
         done.push(thread.id);
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (isRetryableAiError(message)) {
+          // Credito esaurito / rate limit / provider giù: il thread resta in coda, riproviamo al prossimo giro.
+          remaining = true;
+          if (/OpenRouter 402/.test(message)) stopReason = "Credito OpenRouter esaurito: ricarica su openrouter.ai";
+          continue;
+        }
         failed += 1;
         await supabase
           .from("email_threads")
-          .update({ ai_status: "error", ai_error: (err instanceof Error ? err.message : String(err)).slice(0, 500) })
+          .update({ ai_status: "error", ai_error: message.slice(0, 500) })
           .eq("id", thread.id)
           .eq("user_id", userId);
       }
@@ -328,5 +342,5 @@ export async function classifyPendingThreads(opts: {
   };
   await Promise.all(Array.from({ length: opts.concurrency ?? 4 }, worker));
   if (done.length) await supabase.rpc("refresh_email_threads", { p_thread_ids: done });
-  return { analyzed, failed, remaining: remaining || queue.length > 0 };
+  return { analyzed, failed, remaining: remaining || queue.length > 0, skipped: stopReason };
 }

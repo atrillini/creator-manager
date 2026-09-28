@@ -219,7 +219,10 @@ async function storeBatch(
   if (!items.length) return [];
   const threadOf = await assignThreads(supabase, userId, items);
   const now = new Date().toISOString();
-  const rows = items.map((it) => ({
+  // La stessa email può comparire due volte in una cartella (copie, bozze salvate):
+  // l'upsert in blocco rifiuta chiavi duplicate, teniamo l'ultima copia.
+  const unique = [...new Map(items.map((it) => [it.messageId, it])).values()];
+  const rows = unique.map((it) => ({
     user_id: userId,
     provider: "icloud",
     mailbox,
