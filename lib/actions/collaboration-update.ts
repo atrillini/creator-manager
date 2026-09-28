@@ -3,6 +3,7 @@
 import { COLLAB_STATUSES, type CollabStatus } from "@/lib/collab-statuses";
 import { parseFee } from "@/lib/collaboration-form-shared";
 import { refreshPaidFlag } from "@/lib/collaboration-paid-flag";
+import { closeThreadsOfCollaboration } from "@/lib/inbox/collaboration-close";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
 import { isValidUuid } from "@/lib/is-uuid";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
@@ -97,6 +98,7 @@ export async function updateCollaboration(
       return { ok: false, error: error.message };
     }
     await refreshPaidFlag(input.collaborationId);
+    await closeThreadsOfCollaboration(supabase, userId, input.collaborationId, input.status);
     revalidateCollaborationPaths(input.collaborationId);
     return { ok: true };
   }
@@ -129,6 +131,7 @@ export async function updateCollaboration(
     return { ok: false, error: error.message };
   }
   await refreshPaidFlag(input.collaborationId);
+  await closeThreadsOfCollaboration(supabase, userId, input.collaborationId, input.status);
   revalidateCollaborationPaths(input.collaborationId);
   return { ok: true };
 }

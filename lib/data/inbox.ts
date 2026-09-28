@@ -290,14 +290,29 @@ export type InboxSyncStatus = {
   lastSuccessAt: string | null;
   lastRunAt: string | null;
   lastError: string | null;
+  /** Primo import dello storico non ancora concluso (posta in arrivo o inviati). */
+  backfilling: boolean;
+  /** Data dell'email più recente già importata (per mostrare l'avanzamento). */
+  importedUntil: string | null;
 };
 
 export async function getInboxSyncStatus(): Promise<InboxSyncStatus> {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
-  const { data } = await supabase
-    .from("email_sync_state")
-    .select("mailbox, last_run_at, last_success_at, last_error")
-    .eq("user_id", userId);
+  const [{ data }, { data: latest }] = await Promise.all([
+    supabase
+      .from("email_sync_state")
+      .select("mailbox, last_run_at, last_success_at, last_error")
+      .eq("user_id", userId),
+    supabase
+      .from("email_messages")
+      .select("received_at")
+      .eq("user_id", userId)
+      .eq("direction", "in")
+      .not("imap_uid", "is", null)
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   const rows = (data ?? []) as {
     mailbox: string;
     last_run_at: string | null;
@@ -305,10 +320,13 @@ export async function getInboxSyncStatus(): Promise<InboxSyncStatus> {
     last_error: string | null;
   }[];
   const inbox = rows.find((r) => r.mailbox === "INBOX");
+  const sent = rows.find((r) => r.mailbox !== "INBOX");
   return {
     lastSuccessAt: inbox?.last_success_at ?? null,
-    lastRunAt: inbox?.last_run_at ?? null,
+    lastRunAt: rows.map((r) => r.last_run_at).filter(Boolean).sort().at(-1) ?? null,
     lastError: rows.map((r) => r.last_error).find(Boolean) ?? null,
+    backfilling: !inbox?.last_success_at || !sent?.last_success_at,
+    importedUntil: (latest?.received_at as string | undefined) ?? null,
   };
 }
 

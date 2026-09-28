@@ -269,17 +269,35 @@ export async function classifyPendingThreads(opts: {
     return { analyzed: 0, failed: 0, remaining: false, skipped: "OPENROUTER_API_KEY non configurata" };
   }
   const { supabase, userId } = opts;
-  let q = supabase
-    .from("email_threads")
-    .select("id, subject, status, category_source, brand_id, brand_source, message_count")
-    .eq("user_id", userId)
-    .order("last_message_at", { ascending: false })
-    .limit((opts.limit ?? 40) + 1);
-  q = opts.threadIds?.length ? q.in("id", opts.threadIds) : q.eq("ai_status", "pending");
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  const queue = ((data ?? []) as ThreadRow[]).slice(0, opts.limit ?? 40);
-  let remaining = (data ?? []).length > queue.length;
+  const limit = opts.limit ?? 40;
+  const select = "id, subject, status, category_source, brand_id, brand_source, message_count";
+  let rows: ThreadRow[] = [];
+  if (opts.threadIds?.length) {
+    const { data, error } = await supabase.from("email_threads").select(select).eq("user_id", userId).in("id", opts.threadIds);
+    if (error) throw new Error(error.message);
+    rows = (data ?? []) as ThreadRow[];
+  } else {
+    // Prima le conversazioni ancora aperte (quelle che servono oggi), poi lo storico.
+    for (const active of [true, false]) {
+      if (rows.length > limit) break;
+      let q = supabase
+        .from("email_threads")
+        .select(select)
+        .eq("user_id", userId)
+        .eq("ai_status", "pending")
+        .gt("message_count", 0)
+        .order("last_message_at", { ascending: false })
+        .limit(limit + 1 - rows.length);
+      q = active
+        ? q.in("status", ["nuova", "da_rispondere", "in_attesa"])
+        : q.in("status", ["gestita", "archiviata"]);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      rows.push(...((data ?? []) as ThreadRow[]));
+    }
+  }
+  const queue = rows.slice(0, limit);
+  let remaining = rows.length > queue.length;
   if (!queue.length) return { analyzed: 0, failed: 0, remaining: false };
 
   const context = await loadContext(supabase, userId);

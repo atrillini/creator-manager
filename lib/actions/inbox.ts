@@ -9,6 +9,7 @@ import {
   isInboxCategory,
   isInboxStatus,
 } from "@/lib/inbox/constants";
+import { CLOSED_COLLAB_STATUSES } from "@/lib/inbox/collaboration-close";
 import { runInboxJob, type InboxJobResult } from "@/lib/inbox/run";
 import { isValidUuid } from "@/lib/is-uuid";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -59,12 +60,16 @@ export async function updateInboxThreads(input: UpdateThreadInput): Promise<Resu
       if (!isValidUuid(input.collaborationId)) return { ok: false, error: "Collaborazione non valida" };
       const { data: collab } = await supabase
         .from("collaborations")
-        .select("id, brand_id")
+        .select("id, brand_id, status")
         .eq("id", input.collaborationId)
         .eq("user_id", userId)
         .maybeSingle();
       if (!collab) return { ok: false, error: "Collaborazione non trovata" };
       collabBrandId = collab.brand_id as string;
+      // Collegata a un deal già chiuso: la conversazione è storia, non va gestita.
+      if (input.status === undefined && CLOSED_COLLAB_STATUSES.includes(String(collab.status))) {
+        patch.status = "gestita";
+      }
     }
     patch.collaboration_id = input.collaborationId;
   }

@@ -13,7 +13,7 @@ import { htmlToText, normalizeBodyText, normalizeSubject, stripQuotedReply } fro
  * - Rispetta una deadline: si ferma in tempo e riprende al giro successivo.
  */
 
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 40;
 const DEFAULT_BACKFILL_DAYS = 365;
 /** Thread nuovi più vecchi di così (import storico) partono come "gestita". */
 const HISTORY_CUTOFF_DAYS = 14;
@@ -138,7 +138,10 @@ async function saveState(
   if (error) throw new Error(`Stato sync: ${error.message}`);
 }
 
-/** Trova o crea i thread per i messaggi del blocco e restituisce messageId → threadId. */
+/**
+ * Trova o crea i thread per i messaggi del blocco e restituisce messageId → threadId.
+ * Poche query per blocco (lookup e insert in massa): la latenza verso il DB è il collo di bottiglia.
+ */
 async function assignThreads(supabase: SupabaseClient, userId: string, items: ParsedItem[]) {
   const candidateIds = new Set<string>();
   for (const it of items) {
@@ -148,54 +151,63 @@ async function assignThreads(supabase: SupabaseClient, userId: string, items: Pa
   }
   const known = new Map<string, string>();
   const ids = [...candidateIds];
-  for (let i = 0; i < ids.length; i += 200) {
+  for (let i = 0; i < ids.length; i += 150) {
     const { data, error } = await supabase
       .from("email_messages")
       .select("external_message_id, thread_id")
       .eq("user_id", userId)
-      .in("external_message_id", ids.slice(i, i + 200))
+      .in("external_message_id", ids.slice(i, i + 150))
       .not("thread_id", "is", null);
     if (error) throw new Error(`Lettura thread: ${error.message}`);
     for (const r of data ?? []) known.set(String(r.external_message_id), String(r.thread_id));
   }
 
-  const byKey = new Map<string, string>();
-  const result = new Map<string, string>();
+  // 1) Per ogni messaggio: thread già noto oppure chiave del thread da creare.
+  const keyOf = new Map<string, string>();
+  const threadOf = new Map<string, string>();
+  const subjectOfKey = new Map<string, string>();
   for (const it of [...items].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
-    let threadId =
-      known.get(it.messageId) ??
-      [it.inReplyTo, ...[...it.references].reverse()]
-        .filter((x): x is string => !!x)
-        .map((x) => known.get(x))
-        .find(Boolean);
-    if (!threadId) {
-      const key = it.references[0] ?? it.inReplyTo ?? it.messageId;
-      threadId = byKey.get(key);
-      if (!threadId) {
-        const { data: existing } = await supabase
-          .from("email_threads")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("thread_key", key)
-          .maybeSingle();
-        if (existing) {
-          threadId = String(existing.id);
-        } else {
-          const { data: created, error } = await supabase
-            .from("email_threads")
-            .insert({ user_id: userId, thread_key: key, subject: normalizeSubject(it.subject) })
-            .select("id")
-            .single();
-          if (error) throw new Error(`Creazione thread: ${error.message}`);
-          threadId = String(created.id);
-        }
-        byKey.set(key, threadId);
-      }
+    const parents = [it.messageId, it.inReplyTo, ...[...it.references].reverse()].filter((x): x is string => !!x);
+    const knownThread = parents.map((x) => known.get(x)).find(Boolean);
+    if (knownThread) {
+      threadOf.set(it.messageId, knownThread);
+      continue;
     }
-    known.set(it.messageId, threadId);
-    result.set(it.messageId, threadId);
+    const inBatchKey = parents.map((x) => keyOf.get(x)).find(Boolean);
+    const key = inBatchKey ?? it.references[0] ?? it.inReplyTo ?? it.messageId;
+    keyOf.set(it.messageId, key);
+    if (!subjectOfKey.has(key)) subjectOfKey.set(key, normalizeSubject(it.subject));
   }
-  return result;
+
+  // 2) Thread per chiave: esistenti in una query, mancanti in un solo insert.
+  const keys = [...subjectOfKey.keys()];
+  const idByKey = new Map<string, string>();
+  for (let i = 0; i < keys.length; i += 150) {
+    const { data, error } = await supabase
+      .from("email_threads")
+      .select("id, thread_key")
+      .eq("user_id", userId)
+      .in("thread_key", keys.slice(i, i + 150));
+    if (error) throw new Error(`Lettura thread: ${error.message}`);
+    for (const r of data ?? []) idByKey.set(String(r.thread_key), String(r.id));
+  }
+  const missing = keys.filter((k) => !idByKey.has(k));
+  if (missing.length) {
+    const { data, error } = await supabase
+      .from("email_threads")
+      .upsert(
+        missing.map((k) => ({ user_id: userId, thread_key: k, subject: subjectOfKey.get(k) ?? "" })),
+        { onConflict: "user_id,thread_key" }
+      )
+      .select("id, thread_key");
+    if (error) throw new Error(`Creazione thread: ${error.message}`);
+    for (const r of data ?? []) idByKey.set(String(r.thread_key), String(r.id));
+  }
+  for (const [messageId, key] of keyOf) {
+    const id = idByKey.get(key);
+    if (id) threadOf.set(messageId, id);
+  }
+  return threadOf;
 }
 
 async function storeBatch(
@@ -317,7 +329,7 @@ async function updateTouchedThreads(supabase: SupabaseClient, userId: string, th
 
   const matcher = await loadBrandMatcher(supabase, userId);
   const historyCutoff = Date.now() - HISTORY_CUTOFF_DAYS * 86_400_000;
-  for (const t of (threads ?? []) as {
+  const updates = ((threads ?? []) as {
     id: string;
     status: string;
     category: string | null;
@@ -325,7 +337,7 @@ async function updateTouchedThreads(supabase: SupabaseClient, userId: string, th
     last_direction: string | null;
     last_message_at: string | null;
     participants: string[];
-  }[]) {
+  }[]).map((t) => {
     let status = t.status;
     const isOld = t.last_message_at ? new Date(t.last_message_at).getTime() < historyCutoff : false;
     if (t.last_direction === "out") {
@@ -343,7 +355,15 @@ async function updateTouchedThreads(supabase: SupabaseClient, userId: string, th
         patch.brand_source = "regola";
       }
     }
-    await supabase.from("email_threads").update(patch).eq("id", t.id).eq("user_id", userId);
+    return { id: t.id, patch };
+  });
+  // Aggiornamenti in parallelo (a gruppi) per non pagare la latenza uno alla volta.
+  for (let i = 0; i < updates.length; i += 10) {
+    await Promise.all(
+      updates
+        .slice(i, i + 10)
+        .map((u) => supabase.from("email_threads").update(u.patch).eq("id", u.id).eq("user_id", userId))
+    );
   }
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { COLLAB_STATUSES, type CollabStatus } from "@/lib/collab-statuses";
 import { isValidUuid } from "@/lib/is-uuid";
 import { type KanbanStatus, mapKanbanToDbStatus } from "@/lib/types";
+import { closeThreadsOfCollaboration } from "@/lib/inbox/collaboration-close";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 const path = (id: string) => `/collaborations/${id}`;
@@ -38,6 +39,8 @@ export async function setCollaborationStatus(
   if (error) {
     return { ok: false as const, error: error.message };
   }
+  await closeThreadsOfCollaboration(supabase, userId, collaborationId, status);
+  revalidatePath("/inbox");
   revalidateForCollaboration(collaborationId);
   return { ok: true as const };
 }

@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Briefcase,
   CalendarClock,
+  Check,
   ChevronDown,
   ExternalLink,
   Gift,
@@ -198,7 +199,22 @@ export function InboxThreadDetailView({ thread, brands, collaborations }: Props)
               {thread.messageCount === 1 ? "io" : "i"}
             </p>
           </div>
-          {pending ? <Loader2 className="size-4 shrink-0 animate-spin text-gray-400" /> : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {pending ? <Loader2 className="size-4 animate-spin text-gray-400" /> : null}
+            {thread.status === "nuova" || thread.status === "da_rispondere" || thread.status === "in_attesa" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 rounded-full border-gray-200 px-2.5 text-xs"
+                disabled={pending}
+                onClick={() => update({ status: "gestita" })}
+              >
+                <Check className="size-3.5" />
+                Segna gestita
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">

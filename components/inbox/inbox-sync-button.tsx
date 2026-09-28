@@ -41,10 +41,20 @@ export function InboxSyncButton({ status, aiPending }: { status: InboxSyncStatus
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-gray-500">
-      <span>
-        Ultima sync: {formatWhen(status.lastSuccessAt)}
-        {aiPending > 0 ? ` · ${aiPending} in analisi` : ""}
-      </span>
+      {status.backfilling ? (
+        <span className="text-amber-700" title="Il primo import procede dal più vecchio al più recente, un blocco ogni 15 minuti">
+          Import storico in corso
+          {status.importedUntil
+            ? `: arrivato al ${new Date(status.importedUntil).toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" })}`
+            : ""}
+          {status.lastRunAt ? ` · ultimo giro ${formatWhen(status.lastRunAt)}` : ""}
+        </span>
+      ) : (
+        <span>Ultima sync: {formatWhen(status.lastSuccessAt)}</span>
+      )}
+      {aiPending > 0 ? (
+        <span title="Conversazioni in coda per l'analisi AI: calano a ogni giro di sync">· {aiPending} da analizzare</span>
+      ) : null}
       {status.lastError ? <span className="text-red-600">Errore: {status.lastError}</span> : null}
       <Button
         type="button"

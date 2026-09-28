@@ -10,10 +10,13 @@ export async function GET(request: Request) {
   if (!isAuthorizedCron(request)) {
     return NextResponse.json({ ok: false, error: "Non autorizzato" }, { status: 401 });
   }
+  // ?budget=<secondi> solo per esecuzioni locali senza limite di durata (es. import storico in un colpo).
+  const requested = Number(new URL(request.url).searchParams.get("budget"));
+  const budgetMs = Number.isFinite(requested) && requested > 50 ? Math.min(requested, 1800) * 1000 : 50_000;
   const result = await runInboxJob({
     supabase: createSupabaseAdminClient(),
     userId: cronUserId(),
-    budgetMs: 50_000,
+    budgetMs,
   });
   const ok = !result.syncError && !result.aiError;
   return NextResponse.json({ ok, ...result }, { status: ok ? 200 : 500 });
