@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { InboxFiltersPanel } from "@/components/inbox/inbox-filters";
 import { InboxSearch } from "@/components/inbox/inbox-search";
+import { InboxSuggestionsDialog } from "@/components/inbox/inbox-suggestions-dialog";
 import { InboxSyncButton } from "@/components/inbox/inbox-sync-button";
 import { InboxThreadDetailView } from "@/components/inbox/inbox-thread-detail";
 import { InboxThreadList } from "@/components/inbox/inbox-thread-list";
@@ -16,6 +17,7 @@ import {
   getInboxThreads,
   parseInboxView,
 } from "@/lib/data/inbox";
+import { getInboxSuggestions } from "@/lib/data/inbox-suggestions";
 import { isInboxCategory } from "@/lib/inbox/constants";
 import { inboxHref, type InboxParams } from "@/lib/inbox/url";
 import { canAccessInbox } from "@/lib/inbox-access";
@@ -35,7 +37,7 @@ export default async function InboxPage({ searchParams }: PageProps) {
   const view = parseInboxView(sp.view);
   const category = isInboxCategory(sp.cat) ? sp.cat : undefined;
 
-  const [list, counts, tags, brandRows, collaborations, syncStatus, detail] = await Promise.all([
+  const [list, counts, tags, brandRows, collaborations, syncStatus, detail, suggestions] = await Promise.all([
     getInboxThreads({
       view,
       category,
@@ -51,6 +53,7 @@ export default async function InboxPage({ searchParams }: PageProps) {
     getCollaborationOptions(),
     getInboxSyncStatus(),
     sp.t ? getInboxThreadDetail(sp.t) : Promise.resolve(null),
+    getInboxSuggestions(),
   ]);
   const brands = brandRows.map((b) => ({ id: b.id, name: b.name }));
 
@@ -62,7 +65,10 @@ export default async function InboxPage({ searchParams }: PageProps) {
         end={
           <div className="flex w-full flex-col items-end gap-2">
             <InboxSearch initialQuery={sp.q ?? ""} params={sp} />
-            <InboxSyncButton status={syncStatus} aiPending={counts.aiPending} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <InboxSuggestionsDialog brands={suggestions.brands} links={suggestions.links} />
+              <InboxSyncButton status={syncStatus} aiPending={counts.aiPending} />
+            </div>
           </div>
         }
       />
