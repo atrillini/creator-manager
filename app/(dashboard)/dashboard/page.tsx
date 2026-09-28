@@ -7,6 +7,8 @@ import { YouTubeHeroWidget } from "@/components/dashboard/youtube-hero-widget";
 import { getDashboardOverview } from "@/lib/data/dashboard";
 import { getLatestYoutubeStats } from "@/lib/data/fetchers";
 import { getGoogleConnectionStatus } from "@/lib/google-auth";
+import { getInboxDashboardSummary } from "@/lib/data/inbox";
+import { canAccessInbox } from "@/lib/inbox-access";
 import { requireUserId } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +19,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const year = new Date().getFullYear();
   const userId = await requireUserId();
-  const [overview, yt, google] = await Promise.all([
+  const [overview, yt, google, inbox] = await Promise.all([
     getDashboardOverview(),
     getLatestYoutubeStats(),
     getGoogleConnectionStatus(userId),
+    canAccessInbox(userId) ? getInboxDashboardSummary() : Promise.resolve(null),
   ]);
 
   return (
@@ -31,7 +34,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       />
 
       <div className="ui-enter space-y-8">
-        <DashboardPriorityGrid data={overview.priorities} />
+        <DashboardPriorityGrid data={overview.priorities} inbox={inbox} />
         <DashboardMonthSummary data={overview.month} />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold tracking-tight text-gray-900">Andamento</h2>

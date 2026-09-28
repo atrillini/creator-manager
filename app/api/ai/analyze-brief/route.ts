@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const analysis = await analyzeBrief(text);
     return NextResponse.json({ ok: true, analysis });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Errore analisi Gemini";
+    const message = error instanceof Error ? error.message : "Errore analisi brief";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

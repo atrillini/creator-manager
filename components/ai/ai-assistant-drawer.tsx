@@ -17,10 +17,7 @@ export function AIAssistantDrawer() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [modelsInfo, setModelsInfo] = useState<{
-    available: string[];
-    preferred: string | null;
-  } | null>(null);
+  const [modelInfo, setModelInfo] = useState<{ configured: boolean; model: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const hasMessages = useMemo(() => messages.length > 0, [messages]);
@@ -28,12 +25,12 @@ export function AIAssistantDrawer() {
   useEffect(() => {
     if (!open) return;
     void (async () => {
-      const res = await fetch("/api/gemini/models");
+      const res = await fetch("/api/ai/info");
       const data = (await res.json()) as
-        | { ok: true; available: string[]; preferred: string | null }
+        | { ok: true; configured: boolean; models: { smart: string } }
         | { ok: false };
       if (data.ok) {
-        setModelsInfo({ available: data.available, preferred: data.preferred });
+        setModelInfo({ configured: data.configured, model: data.models.smart });
       }
     })();
   }, [open]);
@@ -94,10 +91,9 @@ export function AIAssistantDrawer() {
             <div className="flex items-center justify-between border-b border-gray-100/80 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900">Assistente BI</p>
-                {modelsInfo?.available?.length ? (
+                {modelInfo ? (
                   <p className="text-[10px] text-gray-500">
-                    Modelli: {modelsInfo.available.slice(0, 3).join(", ")}
-                    {modelsInfo.available.length > 3 ? "…" : ""}
+                    {modelInfo.configured ? `Modello: ${modelInfo.model}` : "OPENROUTER_API_KEY non configurata"}
                   </p>
                 ) : null}
               </div>

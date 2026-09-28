@@ -100,7 +100,7 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
     setIsLoading(true);
     void (async () => {
       try {
-        const res = await fetch("/api/gemini/analyze", {
+        const res = await fetch("/api/ai/analyze-brief", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
@@ -188,7 +188,7 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
         <DialogHeader>
           <DialogTitle className="text-gray-900">Genera collaborazione da brief</DialogTitle>
           <DialogDescription className="text-gray-600">
-            Incolla l’email o il brief cliente. Gemini estrarrà brand, compenso e deliverable.
+            Incolla l’email o il brief cliente. L’AI estrarrà brand, compenso e deliverable.
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -201,7 +201,7 @@ export function GenerateFromBriefDialog({ brands, onDraftReady }: Props) {
         />
         {isLoading ? (
           <div className="rounded-xl bg-gray-50/90 px-3 py-2">
-            <AIThinkingLoader label="Gemini sta leggendo il brief..." />
+            <AIThinkingLoader label="L’AI sta leggendo il brief..." />
           </div>
         ) : null}
         {err ? <p className="text-sm text-red-600">{err}</p> : null}

@@ -56,6 +56,9 @@ type Props = {
     initialTimelineNote?: string;
     initialPayments?: { amount: string; paidAt: string; note?: string }[];
   } | null;
+  /** Thread email da collegare alla collaborazione appena creata. */
+  linkEmailThreadId?: string;
+  onCreated?: (id: string) => void;
 };
 
 function pickDefaultBrandId(
@@ -77,6 +80,8 @@ export function CreateCollaborationDialog({
   onOpenChange,
   hideTrigger = false,
   initialDraft,
+  linkEmailThreadId,
+  onCreated,
 }: Props) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -195,11 +200,13 @@ export function CreateCollaborationDialog({
             .filter((d) => isValidDateKey(d.publishDate) && isDeliverableType(d.type)),
           initialTimelineNote,
           initialPayments,
+          linkEmailThreadId,
         });
         if (!res.ok) {
           setErr(res.error);
           return;
         }
+        onCreated?.(res.id);
         setOpenSafe(false);
         setStatus("proposta");
         setIsPeriodic(false);

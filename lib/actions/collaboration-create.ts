@@ -6,6 +6,7 @@ import {
   isValidDateKey,
   parseFee,
 } from "@/lib/collaboration-form-shared";
+import { revalidatePath } from "next/cache";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
 import { isValidUuid } from "@/lib/is-uuid";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
@@ -35,7 +36,25 @@ export type CreateCollaborationInput = {
   initialTimelineNote?: string;
   /** Opzionale: pagamenti iniziali estratti dal brief. */
   initialPayments?: { amount: string; paidAt: string; note?: string }[];
+  /** Opzionale: thread dell'inbox da collegare (con il brand scelto). */
+  linkEmailThreadId?: string;
 };
+
+async function linkEmailThread(
+  supabase: SupabaseClient,
+  collabId: string,
+  brandId: string,
+  threadId: string | undefined,
+  userId: string
+) {
+  if (!threadId || !isValidUuid(threadId)) return;
+  await supabase
+    .from("email_threads")
+    .update({ collaboration_id: collabId, brand_id: brandId, brand_source: "manuale" })
+    .eq("id", threadId)
+    .eq("user_id", userId);
+  revalidatePath("/inbox");
+}
 
 function isStatus(s: string): s is CollabStatus {
   return (COLLAB_STATUSES as readonly string[]).includes(s);
@@ -209,6 +228,7 @@ export async function createCollaboration(
     }
     await insertInitialPayments(supabase, collabId, input.initialPayments, userId);
     await insertInitialTimelineNote(supabase, collabId, input.initialTimelineNote, userId);
+    await linkEmailThread(supabase, collabId, input.brandId, input.linkEmailThreadId, userId);
 
     revalidateCollaborationPaths(collabId);
     return { ok: true, id: collabId };
@@ -256,6 +276,7 @@ export async function createCollaboration(
   }
   await insertInitialPayments(supabase, data.id, input.initialPayments, userId);
   await insertInitialTimelineNote(supabase, data.id, input.initialTimelineNote, userId);
+  await linkEmailThread(supabase, data.id, input.brandId, input.linkEmailThreadId, userId);
 
   revalidateCollaborationPaths(data.id);
   return { ok: true, id: data.id };

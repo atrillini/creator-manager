@@ -17,7 +17,17 @@ export type CreateBrandInput = {
   notes?: string;
   /** Intestazione ricevute (opzionale: se assente non viene toccata). */
   billing?: BrandBilling;
+  /** Domini email per l'inbox (opzionale: se assente non viene toccato). */
+  emailDomains?: string[];
 };
+
+function normalizeDomains(domains: string[] | undefined) {
+  if (!domains) return {};
+  const clean = domains
+    .map((d) => d.trim().toLowerCase().replace(/^@/, "").replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+    .filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d));
+  return { email_domains: [...new Set(clean)] };
+}
 
 export type UpdateBrandInput = CreateBrandInput & { id: string };
 
@@ -48,6 +58,7 @@ export async function createBrand(
       contacts_json: people,
       notes: input.notes?.trim() || null,
       ...brandBillingToRow(input.billing),
+      ...normalizeDomains(input.emailDomains),
     })
     .select("id")
     .single();
@@ -94,6 +105,7 @@ export async function updateBrand(
       contacts_json: people,
       notes: input.notes?.trim() || null,
       ...brandBillingToRow(input.billing),
+      ...normalizeDomains(input.emailDomains),
     })
     .eq("id", input.id)
     .eq("user_id", userId)
@@ -127,5 +139,6 @@ export async function updateBrand(
   revalidatePath("/dashboard");
   revalidatePath("/calendario");
   revalidatePath("/ricevute");
+  revalidatePath("/inbox");
   return { ok: true };
 }

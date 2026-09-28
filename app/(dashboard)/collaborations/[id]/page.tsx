@@ -1,7 +1,10 @@
 import { CollaborationWorkspace } from "@/components/collaboration/collaboration-workspace";
 import { getCollaborationDetail } from "@/lib/data/collaboration-detail";
 import { getBrands } from "@/lib/data/fetchers";
+import { getThreadsForCollaboration } from "@/lib/data/inbox";
 import { getReceiptsForCollaboration } from "@/lib/data/receipts";
+import { canAccessInbox } from "@/lib/inbox-access";
+import { requireUserId } from "@/lib/supabase-server";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -28,10 +31,12 @@ function mergeBrandOptions(
 
 export default async function CollaborationDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [result, allBrands, receipts] = await Promise.all([
+  const inboxEnabled = canAccessInbox(await requireUserId());
+  const [result, allBrands, receipts, emailThreads] = await Promise.all([
     getCollaborationDetail(id),
     getBrands(),
     getReceiptsForCollaboration(id),
+    inboxEnabled ? getThreadsForCollaboration(id) : Promise.resolve(null),
   ]);
 
   if (!result.ok) {
@@ -58,6 +63,7 @@ export default async function CollaborationDetailPage({ params }: PageProps) {
       data={result.data}
       brandOptions={mergeBrandOptions(result.data, allBrands)}
       receipts={receipts}
+      emailThreads={emailThreads}
     />
   );
 }

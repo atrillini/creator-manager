@@ -1,4 +1,4 @@
-import { generateGeminiWithFallback } from "@/lib/ai/gemini-client";
+import { aiModels, chatText } from "@/lib/ai/openrouter";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 const SYSTEM_PROMPT =
@@ -174,16 +174,19 @@ export async function askBusinessAssistant(question: string) {
   }
 
   const context = await buildContextSummary();
-  const result = await generateGeminiWithFallback([
-    { text: SYSTEM_PROMPT },
-    {
-      text: `Contesto dati (JSON):\n${JSON.stringify(context)}`,
-    },
-    { text: `Domanda utente: ${q}` },
-  ]);
+  const result = await chatText({
+    model: aiModels().smart,
+    maxTokens: 1500,
+    temperature: 0.2,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Dati (JSON):\n${JSON.stringify(context)}\n\nDomanda: ${q}` },
+    ],
+  });
 
   return {
-    answer: result.text.trim(),
+    answer: result.content.trim(),
+    model: result.model,
     context,
   };
 }

@@ -3,9 +3,14 @@ import {
   type DashboardOverview,
 } from "@/lib/data/dashboard";
 import { DashboardStatLink } from "@/components/dashboard/dashboard-stat-link";
-import { Calendar, Clock, Gift, Wallet } from "lucide-react";
+import { Calendar, Clock, Gift, Inbox, Wallet } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type Props = { data: DashboardOverview["priorities"] };
+type Props = {
+  data: DashboardOverview["priorities"];
+  /** Riepilogo inbox (solo se l'utente ha accesso all'inbox). */
+  inbox?: { nuove: number; daRispondere: number; proposte: number; urgenti: number } | null;
+};
 
 function formatShortDate(iso: string) {
   return new Date(iso + "T12:00:00").toLocaleDateString("it-IT", {
@@ -14,11 +19,25 @@ function formatShortDate(iso: string) {
   });
 }
 
-export function DashboardPriorityGrid({ data }: Props) {
+export function DashboardPriorityGrid({ data, inbox }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold tracking-tight text-gray-900">Da fare oggi</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={cn("grid gap-3 sm:grid-cols-2", inbox ? "lg:grid-cols-3 xl:grid-cols-5" : "xl:grid-cols-4")}>
+        {inbox ? (
+          <DashboardStatLink
+            href="/inbox"
+            title="Inbox da gestire"
+            icon={Inbox}
+            value={String(inbox.nuove + inbox.daRispondere)}
+            subtitle={`${inbox.nuove} nuove · ${inbox.daRispondere} da rispondere`}
+          >
+            <p className="text-xs text-gray-600">
+              {inbox.proposte > 0 ? `${inbox.proposte} proposte/gifting da valutare` : "Nessuna proposta in sospeso"}
+              {inbox.urgenti > 0 ? <span className="font-medium text-red-600"> · {inbox.urgenti} urgenti</span> : null}
+            </p>
+          </DashboardStatLink>
+        ) : null}
         <DashboardStatLink
           href="/calendario"
           title="Scadenze (7 giorni)"

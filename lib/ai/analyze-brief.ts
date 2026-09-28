@@ -1,4 +1,5 @@
-import { analyzeBrief as analyzeGemini } from "@/lib/gemini";
+import "server-only";
+import { aiModels, chatJson } from "@/lib/ai/openrouter";
 
 export type BriefAnalysis = {
   brand_name: string;
@@ -9,84 +10,62 @@ export type BriefAnalysis = {
   deliverables: { type: string; publish_date: string | null }[];
 };
 
-async function analyzeBriefOpenAI(text: string): Promise<BriefAnalysis> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    throw new Error("OPENAI_API_KEY non configurata");
-  }
-  const prompt =
-    "Sei un assistente per Content Creator. Analizza il testo di questo brief/email e restituisci SOLO un oggetto JSON con questi campi: " +
-    "brand_name (stringa); " +
-    "agreed_fee (numero, estrai il compenso in denaro se presente, altrimenti null); " +
-    "is_giveaway (boolean, true se il brand parla di invio prodotti / barter / seeding / PR package / regalo / gift / scambio merce, anche in aggiunta al compenso); " +
-    "giveaway_details (stringa breve che descrive cosa viene inviato — es. \"PS5 Pro + 2 controller\", null se non è giveaway); " +
-    "giveaway_value (numero, valore € stimato dei beni inviati se citato, altrimenti null); " +
-    "deliverables (array di oggetti con type e publish_date stimata, se presente).";
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+const SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["brand_name", "agreed_fee", "is_giveaway", "giveaway_details", "giveaway_value", "deliverables"],
+  properties: {
+    brand_name: { type: "string", description: "brand cliente (non l'agenzia)" },
+    agreed_fee: { type: ["number", "null"], description: "compenso in euro, se presente" },
+    is_giveaway: {
+      type: "boolean",
+      description: "invio prodotti / barter / seeding / PR package / gift, anche in aggiunta al compenso",
     },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: text },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${body}`);
-  }
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = json.choices?.[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(content) as Partial<BriefAnalysis>;
-  const giveawayDetails =
-    typeof parsed.giveaway_details === "string"
-      ? parsed.giveaway_details.trim()
-      : "";
-  return {
-    brand_name: String(parsed.brand_name ?? "").trim(),
-    agreed_fee:
-      parsed.agreed_fee == null || Number.isNaN(Number(parsed.agreed_fee))
-        ? null
-        : Number(parsed.agreed_fee),
-    is_giveaway: parsed.is_giveaway === true,
-    giveaway_details: giveawayDetails ? giveawayDetails : null,
-    giveaway_value:
-      parsed.giveaway_value == null ||
-      Number.isNaN(Number(parsed.giveaway_value))
-        ? null
-        : Number(parsed.giveaway_value),
-    deliverables: Array.isArray(parsed.deliverables)
-      ? parsed.deliverables.map((d) => {
-          const x = d as { type?: string; publish_date?: string | null };
-          return {
-            type: String(x.type ?? "").trim(),
-            publish_date: x.publish_date ? String(x.publish_date) : null,
-          };
-        })
-      : [],
-  };
-}
+    giveaway_details: { type: ["string", "null"], description: "cosa viene inviato, es. \"PS5 Pro + 2 controller\"" },
+    giveaway_value: { type: ["number", "null"], description: "valore € stimato dei beni, se citato" },
+    deliverables: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "publish_date"],
+        properties: {
+          type: { type: "string", enum: ["Video YouTube", "Reel IG", "Story", "Altro"] },
+          publish_date: { type: ["string", "null"], description: "YYYY-MM-DD" },
+        },
+      },
+    },
+  },
+};
 
+/** Estrae i dati del deal da un brief/email incollato (dialog "Genera da brief"). */
 export async function analyzeBrief(text: string): Promise<BriefAnalysis> {
-  const provider = (process.env.AI_PROVIDER ?? "gemini").toLowerCase();
-  if (provider === "openai") {
-    return analyzeBriefOpenAI(text);
-  }
-  if (provider === "gemini") {
-    return analyzeGemini(text);
-  }
-  // fallback: prova prima gemini poi openai
-  try {
-    return await analyzeGemini(text);
-  } catch {
-    return analyzeBriefOpenAI(text);
-  }
+  const input = text.trim();
+  if (input.length < 5) throw new Error("Incolla un brief più completo");
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await chatJson<BriefAnalysis>({
+    model: aiModels().fast,
+    maxTokens: 800,
+    jsonSchema: { name: "brief_analysis", schema: SCHEMA },
+    messages: [
+      {
+        role: "system",
+        content:
+          `Sei l'assistente di una content creator. Oggi è ${today}. Estrai dal brief/email i dati della collaborazione. ` +
+          "Una riga di deliverables per ogni contenuto (3 reel = 3 righe). Date in formato YYYY-MM-DD, " +
+          "se manca l'anno usa il prossimo futuro. Importi in euro come numeri.",
+      },
+      { role: "user", content: input.slice(0, 20_000) },
+    ],
+  });
+  if (!data.brand_name?.trim()) throw new Error("Brand non riconosciuto nel testo");
+  return {
+    brand_name: data.brand_name.trim(),
+    agreed_fee: Number.isFinite(Number(data.agreed_fee)) && data.agreed_fee != null ? Number(data.agreed_fee) : null,
+    is_giveaway: data.is_giveaway === true,
+    giveaway_details: data.giveaway_details?.trim() || null,
+    giveaway_value:
+      Number.isFinite(Number(data.giveaway_value)) && data.giveaway_value != null ? Number(data.giveaway_value) : null,
+    deliverables: Array.isArray(data.deliverables) ? data.deliverables : [],
+  };
 }

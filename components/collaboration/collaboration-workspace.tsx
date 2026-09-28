@@ -1,6 +1,9 @@
 "use client";
 
-import { formatEur } from "@/lib/format";
+import { formatEur, toYmd } from "@/lib/format";
+import { renderTextWithLinks } from "@/components/linkified-text";
+import { CollaborationEmailThreads } from "@/components/collaboration/collaboration-email-threads";
+import type { InboxThreadListItem } from "@/lib/data/inbox";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { setCollaborationStatus } from "@/lib/actions/collaboration-status";
@@ -85,53 +88,21 @@ const formatEventDate = (iso: string) => {
   }
 };
 
-const URL_RE = /((?:https?:\/\/|www\.)[^\s<>"')\]]+)/gi;
-
-function renderTextWithLinks(text: string | null | undefined) {
-  const src = (text ?? "").trim();
-  if (!src) return "—";
-  const lines = src.split(/\r?\n/);
-  return lines.map((line, lineIdx) => {
-    const parts = line.split(URL_RE);
-    return (
-      <span key={`line-${lineIdx}`}>
-        {parts.map((part, idx) => {
-          if (!part) return null;
-          if (/^(?:https?:\/\/|www\.)/i.test(part)) {
-            const href = part.startsWith("http") ? part : `https://${part}`;
-            return (
-              <a
-                key={`p-${lineIdx}-${idx}`}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700"
-              >
-                {part}
-              </a>
-            );
-          }
-          return <span key={`p-${lineIdx}-${idx}`}>{part}</span>;
-        })}
-        {lineIdx < lines.length - 1 ? <br /> : null}
-      </span>
-    );
-  });
-}
-
 /** Valore per input `datetime-local` in fuso orario locale. */
-function toYmd(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function toLocalInputDateTimeValue(d: Date) {
   const t = d.getTime() - d.getTimezoneOffset() * 60_000;
   return new Date(t).toISOString().slice(0, 16);
 }
 
-type Props = { data: CollaborationDetail; brandOptions: BrandOption[]; receipts: ReceiptRow[] };
+type Props = {
+  data: CollaborationDetail;
+  brandOptions: BrandOption[];
+  receipts: ReceiptRow[];
+  /** null = inbox non accessibile a questo utente (sezione nascosta). */
+  emailThreads: InboxThreadListItem[] | null;
+};
 
-export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) {
+export function CollaborationWorkspace({ data, brandOptions, receipts, emailThreads }: Props) {
   const collab = data;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -998,6 +969,8 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
               </div>
             </CardContent>
           </Card>
+
+          {emailThreads ? <CollaborationEmailThreads threads={emailThreads} /> : null}
 
           <Card>
             <CardHeader>

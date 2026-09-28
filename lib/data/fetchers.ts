@@ -107,6 +107,8 @@ export type BrandRow = {
   vat_number?: string | null;
   billing_extra?: string | null;
   receipt_language?: string | null;
+  /** Domini per l'associazione automatica delle email. */
+  email_domains?: string[] | null;
 };
 
 export type BrandCollabLink = {
@@ -126,7 +128,7 @@ export async function getBrands(): Promise<BrandRow[]> {
   const { data, error } = await supabase
     .from("brands")
     .select(
-      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language"
+      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language, email_domains"
     )
     .eq("user_id", userId)
     .order("name", { ascending: true });
@@ -149,7 +151,7 @@ export async function getAziendeTableBrands(): Promise<AziendeBrandRow[]> {
   const { data: brands, error: brandsError } = await supabase
     .from("brands")
     .select(
-      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language"
+      "id, name, sector, contacts, contacts_json, notes, billing_name, billing_address, vat_number, billing_extra, receipt_language, email_domains"
     )
     .eq("user_id", userId)
     .order("name", { ascending: true });

@@ -38,6 +38,7 @@ export function EditBrandDialog({ brand }: Props) {
   const [notes, setNotes] = useState(brand.notes ?? "");
   const [people, setPeople] = useState<BrandContact[]>([emptyBrandContact()]);
   const [billing, setBilling] = useState<BrandBilling>(() => brandBillingFromRow(brand));
+  const [domains, setDomains] = useState("");
   const nameId = useId();
 
   function openDialog() {
@@ -47,6 +48,7 @@ export function EditBrandDialog({ brand }: Props) {
     const parsed = parseContactsJson(brand.contacts_json);
     setPeople(parsed.length > 0 ? parsed : [emptyBrandContact()]);
     setBilling(brandBillingFromRow(brand));
+    setDomains((brand.email_domains ?? []).join(", "));
     setErr(null);
     setOpen(true);
   }
@@ -81,6 +83,7 @@ export function EditBrandDialog({ brand }: Props) {
           contactPeople: people,
           notes,
           billing,
+          emailDomains: domains.split(/[\s,;]+/).filter(Boolean),
         });
         if (!res.ok) {
           setErr(res.error);
@@ -243,6 +246,24 @@ export function EditBrandDialog({ brand }: Props) {
                   </li>
                 ))}
               </ul>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-brand-domains" className="text-gray-700">
+                Domini email
+              </Label>
+              <Input
+                id="edit-brand-domains"
+                value={domains}
+                onChange={(e) => setDomains(e.target.value)}
+                placeholder="brand.com, brand.it"
+                disabled={pending}
+                className="border-gray-200 bg-white text-gray-900"
+              />
+              <p className="text-[11px] text-gray-500">
+                Le email da questi domini vengono associate al brand nell&apos;inbox. Si aggiornano anche da sole
+                quando associ una conversazione a mano.
+              </p>
             </div>
 
             <BrandBillingFields value={billing} onChange={setBilling} disabled={pending} />
