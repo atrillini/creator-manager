@@ -1,5 +1,6 @@
 import "server-only";
 import { google } from "googleapis";
+import { configuredAppUrl } from "@/lib/app-url";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const GOOGLE_SCOPES = [
@@ -30,8 +31,7 @@ export function createGoogleOAuthClient(redirectUri?: string) {
 
 /** Origine pubblica dell'app (per il redirect URI registrato su Google). */
 export function appOrigin(request: Request) {
-  const fromEnv = process.env.APP_URL?.trim().replace(/\/$/, "");
-  return fromEnv || new URL(request.url).origin;
+  return configuredAppUrl() ?? new URL(request.url).origin;
 }
 
 /**

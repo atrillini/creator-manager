@@ -1,4 +1,5 @@
 import "server-only";
+import { configuredAppUrl } from "@/lib/app-url";
 
 /**
  * Client OpenRouter (API compatibile OpenAI). Due modelli configurabili:
@@ -44,7 +45,7 @@ async function chat(opts: ChatOptions): Promise<{ content: string; model: string
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": process.env.APP_URL?.trim() || "https://creatorcrm.local",
+      "HTTP-Referer": configuredAppUrl() ?? "https://creatorcrm.local",
       "X-Title": "CreatorCRM",
     },
     body: JSON.stringify({
