@@ -2,12 +2,30 @@
 
 import { Button } from "@/components/ui/button";
 import type { YoutubeStatsRow } from "@/lib/data/fetchers";
-import { Loader2, RefreshCcw } from "lucide-react";
+import type { GoogleConnectionStatus } from "@/lib/google-auth";
+import { AlertTriangle, Link2, Loader2, RefreshCcw } from "lucide-react";
 import Image from "next/image";
 import { useState, useTransition } from "react";
 import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
 
-type Props = { initial: YoutubeStatsRow | null };
+type Props = {
+  initial: YoutubeStatsRow | null;
+  google: GoogleConnectionStatus;
+  /** Esito del ritorno da Google (`?google=` nell'URL). */
+  oauthResult: string | null;
+};
+
+const CONNECT_HREF = "/api/google/connect?next=/dashboard";
+
+const OAUTH_MESSAGES: Record<string, { text: string; tone: "ok" | "warn" }> = {
+  collegato: { text: "Account Google collegato: la sync ora gira anche in automatico ogni giorno.", tone: "ok" },
+  annullato: { text: "Collegamento Google annullato.", tone: "warn" },
+  "senza-token": {
+    text: "Google non ha rilasciato un token permanente: riprova con «Collega Google».",
+    tone: "warn",
+  },
+  errore: { text: "Collegamento Google non riuscito: riprova.", tone: "warn" },
+};
 
 function compact(n: number) {
   const abs = Math.abs(n);
@@ -17,12 +35,15 @@ function compact(n: number) {
   return String(Math.round(n));
 }
 
-export function YouTubeHeroWidget({ initial }: Props) {
+export function YouTubeHeroWidget({ initial, google, oauthResult }: Props) {
   const [stats, setStats] = useState<YoutubeStatsRow | null>(initial);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const elapsedSeconds = useElapsedSeconds(pending);
+
+  const oauthMessage = oauthResult ? OAUTH_MESSAGES[oauthResult] : undefined;
+  const needsConnect = !google.connected || google.needsReconnect;
 
   const onSync = () => {
     setSyncError(null);
@@ -90,26 +111,65 @@ export function YouTubeHeroWidget({ initial }: Props) {
             </h3>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-1.5 rounded-full border-gray-200 text-xs"
-          onClick={onSync}
-          disabled={pending}
-        >
-          {pending ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin" />
-              Sync in corso…
-            </>
-          ) : (
-            <>
-              <RefreshCcw className="size-3.5" />
-              Sync
-            </>
-          )}
-        </Button>
+        {needsConnect ? (
+          <Button asChild className="gap-1.5 rounded-full text-xs">
+            <a href={CONNECT_HREF}>
+              <Link2 className="size-3.5" />
+              {google.connected ? "Ricollega Google" : "Collega Google"}
+            </a>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 rounded-full border-gray-200 text-xs"
+            onClick={onSync}
+            disabled={pending}
+          >
+            {pending ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                Sync in corso…
+              </>
+            ) : (
+              <>
+                <RefreshCcw className="size-3.5" />
+                Sync
+              </>
+            )}
+          </Button>
+        )}
       </div>
+      {google.needsReconnect ? (
+        <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          Il collegamento Google è scaduto o è stato revocato: ricollega l&apos;account per riprendere la sync.
+        </p>
+      ) : google.legacyEnv ? (
+        <p className="mt-3 text-xs text-gray-500">
+          Collegato tramite token nelle variabili d&apos;ambiente.{" "}
+          <a href={CONNECT_HREF} className="font-medium text-blue-600 hover:underline">
+            Collega da qui
+          </a>{" "}
+          per non doverlo più rigenerare a mano.
+        </p>
+      ) : google.connected ? (
+        <p className="mt-3 text-[11px] text-gray-400">
+          Google{google.googleEmail ? ` · ${google.googleEmail}` : ""}
+          {google.lastSyncAt
+            ? ` · ultima sync ${new Date(google.lastSyncAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}`
+            : ""}
+          {" · "}
+          <a href={CONNECT_HREF} className="hover:text-gray-600 hover:underline">
+            Ricollega
+          </a>
+        </p>
+      ) : null}
+      {oauthMessage ? (
+        <p className={oauthMessage.tone === "ok" ? "mt-2 text-xs text-emerald-700" : "mt-2 text-xs text-amber-700"}>
+          {oauthMessage.text}
+        </p>
+      ) : null}
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl bg-gray-50 p-4">
           <p className="text-xs text-gray-500">Iscritti</p>

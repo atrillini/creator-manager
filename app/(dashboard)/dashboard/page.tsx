@@ -6,14 +6,21 @@ import { DashboardTrendCard } from "@/components/dashboard/dashboard-trend-card"
 import { YouTubeHeroWidget } from "@/components/dashboard/youtube-hero-widget";
 import { getDashboardOverview } from "@/lib/data/dashboard";
 import { getLatestYoutubeStats } from "@/lib/data/fetchers";
+import { getGoogleConnectionStatus } from "@/lib/google-auth";
+import { requireUserId } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+type PageProps = { searchParams?: Promise<{ google?: string }> };
+
+export default async function DashboardPage({ searchParams }: PageProps) {
+  const sp = (await searchParams) ?? {};
   const year = new Date().getFullYear();
-  const [overview, yt] = await Promise.all([
+  const userId = await requireUserId();
+  const [overview, yt, google] = await Promise.all([
     getDashboardOverview(),
     getLatestYoutubeStats(),
+    getGoogleConnectionStatus(userId),
   ]);
 
   return (
@@ -35,7 +42,7 @@ export default async function DashboardPage() {
         </section>
         <section className="space-y-3">
           <h2 className="text-sm font-semibold tracking-tight text-gray-900">YouTube</h2>
-          <YouTubeHeroWidget initial={yt} />
+          <YouTubeHeroWidget initial={yt} google={google} oauthResult={sp.google ?? null} />
         </section>
       </div>
     </div>

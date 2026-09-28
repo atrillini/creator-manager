@@ -1,5 +1,9 @@
+import "server-only";
 import { google } from "googleapis";
-import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getAuthorizedGoogleClient, recordGoogleSyncResult } from "@/lib/google-auth";
+
+type GoogleAuth = Awaited<ReturnType<typeof getAuthorizedGoogleClient>>;
 
 type YoutubeChannelSnapshot = {
   channelName: string;
@@ -23,25 +27,6 @@ type GoogleApiErrorLike = {
   errors?: unknown;
 };
 
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) {
-    throw new Error(`Missing env ${name}`);
-  }
-  return v;
-}
-
-function getOauthClient() {
-  const client = new google.auth.OAuth2(
-    required("GOOGLE_CLIENT_ID"),
-    required("GOOGLE_CLIENT_SECRET")
-  );
-  client.setCredentials({
-    refresh_token: required("GOOGLE_REFRESH_TOKEN"),
-  });
-  return client;
-}
-
 function formatGoogleError(stage: string, err: unknown): Error {
   const e = err as GoogleApiErrorLike;
   const status = e?.response?.status ?? e?.code ?? "unknown";
@@ -59,8 +44,7 @@ function formatGoogleError(stage: string, err: unknown): Error {
   return new Error(`[${stage}] status=${status} message=${message}${detail ? ` detail=${detail}` : ""}`);
 }
 
-async function fetchChannelSnapshot(): Promise<YoutubeChannelSnapshot> {
-  const auth = getOauthClient();
+async function fetchChannelSnapshot(auth: GoogleAuth): Promise<YoutubeChannelSnapshot> {
   const youtube = google.youtube({ version: "v3", auth });
   const channelId = process.env.YOUTUBE_CHANNEL_ID;
   let res;
@@ -93,10 +77,10 @@ async function fetchChannelSnapshot(): Promise<YoutubeChannelSnapshot> {
 }
 
 async function fetchEstimatedRevenues(
+  auth: GoogleAuth,
   startDate: string,
   endDate: string
 ): Promise<YoutubeRevenuePoint[]> {
-  const auth = getOauthClient();
   const analytics = google.youtubeAnalytics({ version: "v2", auth });
   let rows;
   try {
@@ -124,8 +108,8 @@ async function fetchEstimatedRevenues(
   return out;
 }
 
-export async function getYoutubeDebugDiagnostics() {
-  const auth = getOauthClient();
+export async function getYoutubeDebugDiagnostics(userId: string) {
+  const auth = await getAuthorizedGoogleClient(userId);
   const oauth2 = google.oauth2({ version: "v2", auth });
   const youtube = google.youtube({ version: "v3", auth });
   const analytics = google.youtubeAnalytics({ version: "v2", auth });
@@ -244,18 +228,37 @@ export function resolveFullMonthRange(range?: { startDate?: string; endDate?: st
   return { startDate: ymd(start), endDate: ymd(end) };
 }
 
-export async function syncYoutubeData(range?: { startDate?: string; endDate?: string }) {
-  const snapshot = await fetchChannelSnapshot();
+type SyncOptions = {
+  userId: string;
+  /** Client dell'utente (route API) o service role (cron): si filtra sempre per userId. */
+  supabase: SupabaseClient;
+  range?: { startDate?: string; endDate?: string };
+};
+
+/** Sync canale + ricavi; registra l'esito sul collegamento Google (per il banner "Ricollega"). */
+export async function syncYoutubeData(opts: SyncOptions) {
+  try {
+    const result = await runYoutubeSync(opts);
+    await recordGoogleSyncResult(opts.userId, null);
+    return result;
+  } catch (err) {
+    await recordGoogleSyncResult(opts.userId, err).catch(() => undefined);
+    throw err;
+  }
+}
+
+async function runYoutubeSync({ userId, supabase, range }: SyncOptions) {
+  const auth = await getAuthorizedGoogleClient(userId);
+  const snapshot = await fetchChannelSnapshot(auth);
   const { startDate, endDate } = resolveFullMonthRange(range);
   let revenues: YoutubeRevenuePoint[] = [];
   let monetizationWarning: string | null = null;
   try {
-    revenues = await fetchEstimatedRevenues(startDate, endDate);
+    revenues = await fetchEstimatedRevenues(auth, startDate, endDate);
   } catch (err) {
     monetizationWarning = err instanceof Error ? err.message : "Monetization fetch failed";
   }
 
-  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { error: upsertError } = await supabase.from("youtube_stats").upsert(
     {
       user_id: userId,

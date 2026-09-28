@@ -6,7 +6,7 @@ export async function GET() {
   const auth = await requireApiAdmin();
   if (!auth.ok) return auth.response;
   try {
-    const diagnostics = await getYoutubeDebugDiagnostics();
+    const diagnostics = await getYoutubeDebugDiagnostics(auth.userId);
     return NextResponse.json({ ok: true, diagnostics });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown debug error";
