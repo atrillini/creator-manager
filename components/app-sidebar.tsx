@@ -34,9 +34,12 @@ export function AppSidebar() {
   const [open, setOpen] = useState(false);
   const [canAccessInboxItem, setCanAccessInboxItem] = useState(false);
 
-  useEffect(() => {
+  // Chiude il menu a ogni cambio pagina.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     let cancelled = false;

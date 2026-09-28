@@ -48,7 +48,7 @@ export function DashboardTrendCard({ points }: Props) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
         <div>
           <CardTitle className="text-sm font-medium text-gray-900">Entrate (12 mesi)</CardTitle>
-          <p className="text-xs text-gray-500">Sponsor incassati + YouTube</p>
+          <p className="text-xs text-gray-500">Collaborazioni incassate, YouTube e altre entrate</p>
         </div>
         <Link href="/finanze" className="text-xs font-medium text-blue-600 hover:underline">
           Apri finanze

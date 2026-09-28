@@ -1,7 +1,11 @@
 import { parseContactsJson, type BrandContact } from "@/lib/brand-contacts";
+import { formatEurOrNull, toNumberOrNull } from "@/lib/format";
 import { isValidUuid } from "@/lib/is-uuid";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 import type { EventType } from "@/lib/collab-event-types";
+import { COLLAB_FILES_BUCKET } from "@/lib/storage-constants";
+
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export type BrandLite = {
   id: string;
@@ -21,7 +25,12 @@ export type CollaborationEventRow = {
   event_at: string | null;
   event_type: EventType;
   description: string | null;
+  /** Oggetto nel bucket privato `collaboration-files`. */
+  attached_file_path: string | null;
+  /** Link esterno legacy. */
   attached_file_url: string | null;
+  /** URL da usare nei link: firmato (scade dopo un'ora) o legacy. */
+  attachment_href: string | null;
 };
 
 export type DeliverableRow = {
@@ -101,24 +110,6 @@ type CollaborationRow = {
   brands: BrandsJoin | BrandsJoin[] | null;
 };
 
-function toMoney(v: string | number | null): string | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === "string") {
-    if (v.trim() === "") return null;
-    const n = Number(v);
-    if (!Number.isNaN(n))
-      return new Intl.NumberFormat("it-IT", {
-        style: "currency",
-        currency: "EUR",
-      }).format(n);
-    return v;
-  }
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(v);
-}
-
 function normalizeBrand(row: CollaborationRow): BrandLite | null {
   const b = row.brands;
   if (!b) return null;
@@ -133,15 +124,6 @@ function normalizeBrand(row: CollaborationRow): BrandLite | null {
     contact_people: people,
     notes: raw.notes,
   };
-}
-
-function toNumericOrNull(v: number | string | null | undefined): number | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === "number" && !Number.isNaN(v)) return v;
-  const s = String(v).trim();
-  if (s === "") return null;
-  const n = Number(s.replace(/\s/g, "").replace(",", "."));
-  return Number.isNaN(n) ? null : n;
 }
 
 export async function getCollaborationDetail(
@@ -178,7 +160,7 @@ export async function getCollaborationDetail(
 
   const { data: events, error: eErr } = await supabase
     .from("collaboration_events")
-    .select("id, created_at, event_at, event_type, description, attached_file_url")
+    .select("id, created_at, event_at, event_type, description, attached_file_path, attached_file_url")
     .eq("collaboration_id", id)
     .eq("user_id", userId)
     .order("event_at", { ascending: false, nullsFirst: false });
@@ -208,28 +190,40 @@ export async function getCollaborationDetail(
     return { ok: false, message: pErr.message };
   }
 
-  const eventRows: CollaborationEventRow[] = (events ?? []).map((e) => {
-    const r = e as {
-      id: string;
-      created_at: string;
-      event_at?: string | null;
-      event_type: EventType;
-      description: string | null;
-      attached_file_url: string | null;
-    };
-    return {
-      ...r,
-      event_at: r.event_at ?? r.created_at,
-    };
-  });
+  const rawEvents = (events ?? []) as {
+    id: string;
+    created_at: string;
+    event_at?: string | null;
+    event_type: EventType;
+    description: string | null;
+    attached_file_path: string | null;
+    attached_file_url: string | null;
+  }[];
+  const paths = rawEvents.map((e) => e.attached_file_path).filter((p): p is string => !!p);
+  const signedByPath = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from(COLLAB_FILES_BUCKET)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    for (const s of signed ?? []) {
+      if (s.path && s.signedUrl) signedByPath.set(s.path, s.signedUrl);
+    }
+  }
+  const eventRows: CollaborationEventRow[] = rawEvents.map((r) => ({
+    ...r,
+    event_at: r.event_at ?? r.created_at,
+    attachment_href: r.attached_file_path
+      ? signedByPath.get(r.attached_file_path) ?? null
+      : r.attached_file_url,
+  }));
 
-  const agreedRaw = toNumericOrNull(
+  const agreedRaw = toNumberOrNull(
     collab.agreed_fee as number | string | null
   );
-  const fpcRaw = toNumericOrNull(
+  const fpcRaw = toNumberOrNull(
     collab.fee_per_content as number | string | null
   );
-  const giveawayValueRaw = toNumericOrNull(
+  const giveawayValueRaw = toNumberOrNull(
     collab.giveaway_value as number | string | null
   );
   const payments = (pays ?? []) as CollaborationPaymentRow[];
@@ -239,7 +233,7 @@ export async function getCollaborationDetail(
   const detail: CollaborationDetail = {
     id: collab.id,
     general_notes: collab.general_notes,
-    agreed_fee: toMoney(collab.agreed_fee as number | string | null),
+    agreed_fee: formatEurOrNull(collab.agreed_fee as number | string | null),
     agreed_fee_value: agreedRaw,
     brief_text: collab.brief_text,
     status: collab.status,
@@ -253,13 +247,13 @@ export async function getCollaborationDetail(
         : Number.isFinite(Number(collab.content_count))
           ? Number(collab.content_count)
           : null,
-    fee_per_content: toMoney(
+    fee_per_content: formatEurOrNull(
       collab.fee_per_content as number | string | null
     ),
     fee_per_content_value: fpcRaw,
     is_giveaway: collab.is_giveaway === true,
     giveaway_details: collab.giveaway_details ?? null,
-    giveaway_value: toMoney(collab.giveaway_value as number | string | null),
+    giveaway_value: formatEurOrNull(collab.giveaway_value as number | string | null),
     giveaway_value_amount: giveawayValueRaw,
     brand: normalizeBrand(collab),
     events: eventRows,

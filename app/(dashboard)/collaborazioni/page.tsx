@@ -54,6 +54,7 @@ type PageProps = {
     from?: string;
     to?: string;
     q?: string;
+    rifiutate?: string;
   }>;
 };
 
@@ -62,12 +63,17 @@ export default async function CollaborazioniPage({ searchParams }: PageProps) {
   const range = parseRange(sp.range);
   const { startDate, endDate } = resolveRange(range, sp.from, sp.to);
   const query = (sp.q ?? "").trim();
+  const showRejected = sp.rifiutate === "1";
 
   const [collabResult, brandRows] = await Promise.all([
     getCollaborations({ startDate, endDate, query }),
     getBrands(),
   ]);
   const brandOptions = brandRows.map((b) => ({ id: b.id, name: b.name }));
+  const rejectedCount = collabResult.items.filter((c) => c.kanbanStatus === "rifiutate").length;
+  const visibleItems = showRejected
+    ? collabResult.items
+    : collabResult.items.filter((c) => c.kanbanStatus !== "rifiutate");
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -77,10 +83,11 @@ export default async function CollaborazioniPage({ searchParams }: PageProps) {
         actions={<CollaborazioniActions brands={brandOptions} />}
       />
       <CollaborazioniFilters
-        filteredCount={collabResult.items.length}
+        filteredCount={visibleItems.length}
         totalCount={collabResult.totalCount}
+        rejectedCount={rejectedCount}
       />
-      {collabResult.items.length === 0 && (
+      {visibleItems.length === 0 && (
         <p className="mb-3 text-sm text-muted-foreground">
           {collabResult.totalCount === 0
             ? "Nessun deal: crea un’azienda sotto Aziende, poi usa “Nuova collaborazione”."
@@ -88,7 +95,7 @@ export default async function CollaborazioniPage({ searchParams }: PageProps) {
         </p>
       )}
       <div className="ui-enter">
-        <CollaborationKanban collaborations={collabResult.items} />
+        <CollaborationKanban collaborations={visibleItems} showRejected={showRejected} />
       </div>
     </div>
   );

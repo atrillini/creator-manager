@@ -1,3 +1,4 @@
+import { formatEur } from "@/lib/format";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ReceiptsTable } from "@/components/ricevute/receipts-table";
 import { ReceiptsToolbar } from "@/components/ricevute/receipts-toolbar";
@@ -7,8 +8,7 @@ import { OCCASIONAL_WORK_THRESHOLD } from "@/lib/receipts/model";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-const eur = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+const eur = (n: number) => formatEur(n);
 
 type PageProps = {
   searchParams?: Promise<{ anno?: string; collaborazione?: string }>;

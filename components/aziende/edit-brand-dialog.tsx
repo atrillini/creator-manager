@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Loader2, Pencil, Trash2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 
 type Props = { brand: BrandRow };
 
@@ -40,8 +40,7 @@ export function EditBrandDialog({ brand }: Props) {
   const [billing, setBilling] = useState<BrandBilling>(() => brandBillingFromRow(brand));
   const nameId = useId();
 
-  useEffect(() => {
-    if (!open) return;
+  function openDialog() {
     setName(brand.name);
     setSector(brand.sector ?? "");
     setNotes(brand.notes ?? "");
@@ -49,7 +48,8 @@ export function EditBrandDialog({ brand }: Props) {
     setPeople(parsed.length > 0 ? parsed : [emptyBrandContact()]);
     setBilling(brandBillingFromRow(brand));
     setErr(null);
-  }, [open, brand]);
+    setOpen(true);
+  }
 
   function setPerson(index: number, patch: Partial<BrandContact>) {
     setPeople((prev) => {
@@ -99,7 +99,7 @@ export function EditBrandDialog({ brand }: Props) {
         variant="ghost"
         size="icon"
         className="h-8 w-8 shrink-0 text-gray-500 hover:text-gray-900"
-        onClick={() => setOpen(true)}
+        onClick={openDialog}
         aria-label={`Modifica ${brand.name}`}
       >
         <Pencil className="size-4" />

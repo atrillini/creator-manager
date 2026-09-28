@@ -2,7 +2,8 @@ export type KanbanStatus =
   | "nuove"
   | "in_trattativa"
   | "accettate"
-  | "completate";
+  | "completate"
+  | "rifiutate";
 
 export const KANBAN_COLUMNS: { id: KanbanStatus; title: string }[] = [
   { id: "nuove", title: "Nuove" },
@@ -11,14 +12,24 @@ export const KANBAN_COLUMNS: { id: KanbanStatus; title: string }[] = [
   { id: "completate", title: "Completate" },
 ];
 
+/** Colonna mostrata solo con l'interruttore "Mostra rifiutate". */
+export const REJECTED_KANBAN_COLUMN: { id: KanbanStatus; title: string } = {
+  id: "rifiutate",
+  title: "Rifiutate",
+};
+
+export type KanbanCollaboration = {
+  id: string;
+  title: string;
+  brandName: string;
+  agreedFee: string | null;
+  isGiveaway?: boolean;
+  giveawayValue?: string | null;
+  kanbanStatus: KanbanStatus;
+};
+
 /** Mappa `collaborations.status` del DB al board Kanban. */
-export function mapStatusToKanban(
-  status: string
-):
-  | "nuove"
-  | "in_trattativa"
-  | "accettate"
-  | "completate" {
+export function mapStatusToKanban(status: string): KanbanStatus {
   switch (status) {
     case "in valutazione":
       return "in_trattativa";
@@ -26,8 +37,9 @@ export function mapStatusToKanban(
       return "accettate";
     case "completata":
       return "completate";
-    case "proposta":
     case "rifiutata":
+      return "rifiutate";
+    case "proposta":
     default:
       return "nuove";
   }
@@ -40,7 +52,8 @@ export function mapKanbanToDbStatus(
   | "proposta"
   | "in valutazione"
   | "accettata"
-  | "completata" {
+  | "completata"
+  | "rifiutata" {
   switch (col) {
     case "nuove":
       return "proposta";
@@ -50,5 +63,7 @@ export function mapKanbanToDbStatus(
       return "accettata";
     case "completate":
       return "completata";
+    case "rifiutate":
+      return "rifiutata";
   }
 }

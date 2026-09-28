@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeDate, normalizeDeliverableType, pickBrandIdByName } from "@/lib/ai/brief-draft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -92,31 +93,6 @@ function formatDate(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
-}
-
-function pickBrandIdByName(brands: BrandOption[], fromGemini: string): string | undefined {
-  const q = fromGemini.trim().toLowerCase();
-  if (!q) return undefined;
-  const exact = brands.find((b) => b.name.trim().toLowerCase() === q);
-  if (exact) return exact.id;
-  const partial = brands.find((b) => b.name.trim().toLowerCase().includes(q));
-  return partial?.id;
-}
-
-function normalizeDeliverableType(raw: string): string | null {
-  const t = raw.trim().toLowerCase();
-  if (!t) return null;
-  if (t.includes("story")) return "Story";
-  if (t.includes("reel") || t.includes("ig")) return "Reel IG";
-  if (t.includes("youtube") || t.includes("yt")) return "Video YouTube";
-  return null;
-}
-
-function normalizeDate(raw: string | null): string | null {
-  if (!raw) return null;
-  const t = raw.trim().toLowerCase();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  return null;
 }
 
 function compactUrl(raw: string) {

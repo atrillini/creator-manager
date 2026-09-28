@@ -1,7 +1,10 @@
+import { requireApiUser } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { getGeminiModelCandidates, listAvailableGeminiModels } from "@/lib/ai/gemini-client";
 
 export async function GET() {
+  const auth = await requireApiUser();
+  if (!auth.ok) return auth.response;
   try {
     const [available, candidates] = await Promise.all([
       listAvailableGeminiModels(),

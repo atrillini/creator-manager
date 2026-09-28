@@ -218,15 +218,35 @@ export async function getYoutubeDebugDiagnostics() {
   return diag;
 }
 
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * I ricavi vengono salvati come totale mensile: il range va allargato a mesi interi,
+ * altrimenti un mese parziale sovrascriverebbe il totale già salvato.
+ * Default: dal primo del mese precedente a oggi.
+ */
+export function resolveFullMonthRange(range?: { startDate?: string; endDate?: string }) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  let end = range?.endDate ? new Date(`${range.endDate}T12:00:00`) : today;
+  if (Number.isNaN(end.getTime()) || end > today) end = today;
+  const monthEnd = new Date(end.getFullYear(), end.getMonth() + 1, 0, 12);
+  end = monthEnd > today ? today : monthEnd;
+
+  let start = range?.startDate ? new Date(`${range.startDate}T12:00:00`) : null;
+  if (!start || Number.isNaN(start.getTime())) {
+    start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 12);
+  }
+  start = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+  if (start > end) start = new Date(end.getFullYear(), end.getMonth(), 1, 12);
+  return { startDate: ymd(start), endDate: ymd(end) };
+}
+
 export async function syncYoutubeData(range?: { startDate?: string; endDate?: string }) {
   const snapshot = await fetchChannelSnapshot();
-  const end = range?.endDate ? new Date(`${range.endDate}T12:00:00`) : new Date();
-  const start = range?.startDate ? new Date(`${range.startDate}T12:00:00`) : new Date(end);
-  if (!range?.startDate) {
-    start.setDate(end.getDate() - 30);
-  }
-  const startDate = start.toISOString().slice(0, 10);
-  const endDate = end.toISOString().slice(0, 10);
+  const { startDate, endDate } = resolveFullMonthRange(range);
   let revenues: YoutubeRevenuePoint[] = [];
   let monetizationWarning: string | null = null;
   try {

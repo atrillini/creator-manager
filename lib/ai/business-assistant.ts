@@ -2,114 +2,168 @@ import { generateGeminiWithFallback } from "@/lib/ai/gemini-client";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 const SYSTEM_PROMPT =
-  "Sei l'assistente finanziario e gestionale di un Content Creator. Rispondi alle domande basandoti sui dati forniti. Sii preciso, professionale e sintetico. Ad esempio, se l'utente chiede quali brand hanno pagato di più quest'anno, somma i compensi pattiuti e fai una classifica. Se chiede quanti contenuti mancano, conta i deliverables non pubblicati.";
+  "Sei l'assistente finanziario e gestionale di un Content Creator. Rispondi alle domande basandoti SOLO sui dati forniti, in italiano. Sii preciso, professionale e sintetico. " +
+  "Distingui sempre tra compensi pattuiti (agreed_fee) e incassi reali (pagamenti registrati): 'quanto ho guadagnato' si riferisce agli incassi, salvo diversa indicazione. " +
+  "Le entrate YouTube sono stime mensili. Le spese vanno sottratte per calcolare il netto. Se un dato non è presente dillo chiaramente invece di stimarlo.";
 
-type Summary = {
-  generatedAt: string;
-  brands: {
-    total: number;
-    list: { id: string; name: string; sector: string | null }[];
-  };
-  collaborations: {
-    total: number;
-    byStatus: Record<string, number>;
-    totalAgreedFee: number;
-    topBrandByAgreedFee: { brand: string; total: number }[];
-  };
-  deliverables: {
-    total: number;
-    nonPublished: number;
-    byStatus: Record<string, number>;
-  };
-  financials: {
-    totalRows: number;
-    byTypeAmount: Record<string, number>;
-    monthlyRevenue: { month: string; total: number }[];
-  };
-};
+type BrandJoin = { name: string } | { name: string }[] | null;
 
-async function buildContextSummary(): Promise<Summary> {
+function joinName(b: BrandJoin): string {
+  const n = Array.isArray(b) ? b[0]?.name : b?.name;
+  return n?.trim() || "Brand";
+}
+
+function num(v: number | string | null | undefined) {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+async function buildContextSummary() {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
-  const [brandsRes, collabRes, delivRes, finRes] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+  const [brandsRes, collabRes, delivRes, finRes, payRes, receiptsRes] = await Promise.all([
     supabase.from("brands").select("id, name, sector").eq("user_id", userId).order("name", { ascending: true }),
     supabase
       .from("collaborations")
-      .select("status, agreed_fee, brands ( name )")
+      .select("id, status, agreed_fee, brief_text, created_at, paid_at, is_giveaway, giveaway_value, brands ( name )")
       .eq("user_id", userId),
-    supabase.from("deliverables").select("status").eq("user_id", userId),
+    supabase
+      .from("deliverables")
+      .select("type, status, publish_date, collaboration_id")
+      .eq("user_id", userId),
     supabase.from("financials").select("type, amount, date").eq("user_id", userId),
+    supabase.from("collaboration_payments").select("collaboration_id, amount, paid_at").eq("user_id", userId),
+    supabase
+      .from("receipts")
+      .select("year, status, gross_amount, net_amount")
+      .eq("user_id", userId),
   ]);
 
   const brands = (brandsRes.data ?? []) as { id: string; name: string; sector: string | null }[];
   const collabs = (collabRes.data ?? []) as {
+    id: string;
     status: string;
     agreed_fee: number | string | null;
-    brands: { name: string } | { name: string }[] | null;
+    brief_text: string | null;
+    created_at: string;
+    paid_at: string | null;
+    is_giveaway: boolean | null;
+    giveaway_value: number | string | null;
+    brands: BrandJoin;
   }[];
-  const delivs = (delivRes.data ?? []) as { status: string }[];
+  const delivs = (delivRes.data ?? []) as {
+    type: string;
+    status: string;
+    publish_date: string | null;
+    collaboration_id: string;
+  }[];
   const fins = (finRes.data ?? []) as { type: string; amount: number | string | null; date: string }[];
+  const pays = (payRes.data ?? []) as { collaboration_id: string; amount: number | string; paid_at: string }[];
+  const receipts = (receiptsRes.data ?? []) as {
+    year: number;
+    status: string;
+    gross_amount: number | string;
+    net_amount: number | string;
+  }[];
 
-  const byStatus: Record<string, number> = {};
-  let totalAgreedFee = 0;
-  const brandFee = new Map<string, number>();
-  for (const c of collabs) {
-    const s = String(c.status || "sconosciuto");
-    byStatus[s] = (byStatus[s] ?? 0) + 1;
-    const fee = Number(c.agreed_fee ?? 0);
-    if (Number.isFinite(fee) && fee > 0) {
-      totalAgreedFee += fee;
-      const b = Array.isArray(c.brands) ? c.brands[0]?.name : c.brands?.name;
-      const bn = b?.trim() || "Brand";
-      brandFee.set(bn, (brandFee.get(bn) ?? 0) + fee);
+  const paidByCollab = new Map<string, number>();
+  for (const p of pays) {
+    paidByCollab.set(p.collaboration_id, (paidByCollab.get(p.collaboration_id) ?? 0) + num(p.amount));
+  }
+  const collabTitle = new Map(collabs.map((c) => [c.id, `${c.brief_text?.trim() || "Senza titolo"} (${joinName(c.brands)})`]));
+
+  // Per mese: incassi collaborazioni, YouTube, altre entrate, spese
+  const monthly = new Map<string, { collaborazioni: number; youtube: number; altreEntrate: number; spese: number }>();
+  const bucket = (month: string) => {
+    let m = monthly.get(month);
+    if (!m) {
+      m = { collaborazioni: 0, youtube: 0, altreEntrate: 0, spese: 0 };
+      monthly.set(month, m);
     }
-  }
-  const topBrandByAgreedFee = [...brandFee.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([brand, total]) => ({ brand, total }));
-
-  const delivByStatus: Record<string, number> = {};
-  let nonPublished = 0;
-  for (const d of delivs) {
-    const s = String(d.status || "sconosciuto");
-    delivByStatus[s] = (delivByStatus[s] ?? 0) + 1;
-    if (s !== "pubblicato") nonPublished += 1;
-  }
-
-  const byTypeAmount: Record<string, number> = {};
-  const byMonth = new Map<string, number>();
+    return m;
+  };
+  for (const p of pays) bucket(p.paid_at.slice(0, 7)).collaborazioni += num(p.amount);
   for (const f of fins) {
-    const type = String(f.type || "Altro");
-    const amount = Number(f.amount ?? 0);
-    if (!Number.isFinite(amount)) continue;
-    byTypeAmount[type] = (byTypeAmount[type] ?? 0) + amount;
-    const month = String(f.date).slice(0, 7);
-    byMonth.set(month, (byMonth.get(month) ?? 0) + amount);
+    const m = bucket(String(f.date).slice(0, 7));
+    const amount = Math.abs(num(f.amount));
+    if (f.type === "Entrata YouTube") m.youtube += amount;
+    else if (f.type === "Spesa Materiale" || f.type === "Altra spesa") m.spese += amount;
+    else m.altreEntrate += amount;
   }
-  const monthlyRevenue = [...byMonth.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-12)
-    .map(([month, total]) => ({ month, total }));
+
+  const byBrand = new Map<string, { pattuito: number; incassato: number; collaborazioni: number }>();
+  for (const c of collabs) {
+    const b = joinName(c.brands);
+    const cur = byBrand.get(b) ?? { pattuito: 0, incassato: 0, collaborazioni: 0 };
+    cur.collaborazioni += 1;
+    cur.pattuito += num(c.agreed_fee);
+    cur.incassato += paidByCollab.get(c.id) ?? 0;
+    byBrand.set(b, cur);
+  }
+
+  const receiptsByYear: Record<string, { emesse: number; lordoEmesso: number; nettoIncassato: number; inAttesa: number }> = {};
+  for (const r of receipts) {
+    if (r.status === "annullata") continue;
+    const y = String(r.year);
+    const cur = (receiptsByYear[y] ??= { emesse: 0, lordoEmesso: 0, nettoIncassato: 0, inAttesa: 0 });
+    cur.emesse += 1;
+    cur.lordoEmesso += num(r.gross_amount);
+    if (r.status === "pagata") cur.nettoIncassato += num(r.net_amount);
+    else cur.inAttesa += num(r.net_amount);
+  }
 
   return {
-    generatedAt: new Date().toISOString(),
-    brands: { total: brands.length, list: brands },
-    collaborations: {
-      total: collabs.length,
-      byStatus,
-      totalAgreedFee,
-      topBrandByAgreedFee,
+    oggi: today,
+    brand: { totale: brands.length, elenco: brands.map((b) => ({ nome: b.name, settore: b.sector })) },
+    collaborazioni: collabs.map((c) => {
+      const agreed = num(c.agreed_fee);
+      const paid = paidByCollab.get(c.id) ?? 0;
+      return {
+        titolo: c.brief_text?.trim() || "Senza titolo",
+        brand: joinName(c.brands),
+        stato: c.status,
+        creata: c.created_at.slice(0, 10),
+        compensoPattuito: agreed || null,
+        incassato: round2(paid),
+        residuo: agreed > 0 ? round2(Math.max(0, agreed - paid)) : null,
+        saldata: Boolean(c.paid_at),
+        giveaway: c.is_giveaway ? { valoreStimato: num(c.giveaway_value) || null } : null,
+      };
+    }),
+    perBrand: [...byBrand.entries()]
+      .map(([brand, v]) => ({ brand, ...v, pattuito: round2(v.pattuito), incassato: round2(v.incassato) }))
+      .sort((a, b) => b.incassato - a.incassato),
+    perMese: [...monthly.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-24)
+      .map(([mese, v]) => ({
+        mese,
+        collaborazioni: round2(v.collaborazioni),
+        youtube: round2(v.youtube),
+        altreEntrate: round2(v.altreEntrate),
+        spese: round2(v.spese),
+        netto: round2(v.collaborazioni + v.youtube + v.altreEntrate - v.spese),
+      })),
+    contenuti: {
+      totale: delivs.length,
+      nonPubblicati: delivs.filter((d) => d.status !== "pubblicato").length,
+      prossimeScadenze: delivs
+        .filter((d) => d.status !== "pubblicato" && d.publish_date && d.publish_date >= today)
+        .sort((a, b) => String(a.publish_date).localeCompare(String(b.publish_date)))
+        .slice(0, 20)
+        .map((d) => ({
+          data: d.publish_date,
+          tipo: d.type,
+          stato: d.status,
+          collaborazione: collabTitle.get(d.collaboration_id) ?? null,
+        })),
+      inRitardo: delivs.filter((d) => d.status !== "pubblicato" && d.publish_date && d.publish_date < today).length,
     },
-    deliverables: {
-      total: delivs.length,
-      nonPublished,
-      byStatus: delivByStatus,
-    },
-    financials: {
-      totalRows: fins.length,
-      byTypeAmount,
-      monthlyRevenue,
-    },
+    ricevutePerAnno: receiptsByYear,
   };
 }
 

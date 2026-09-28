@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEur } from "@/lib/format";
 import {
   cancelReceipt,
   deleteReceipt,
@@ -45,8 +46,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-const eur = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+const eur = (n: number) => formatEur(n);
 
 const dateIt = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("it-IT");
 

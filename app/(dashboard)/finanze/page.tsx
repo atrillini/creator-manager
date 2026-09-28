@@ -9,20 +9,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FinancialMovementDialog } from "@/components/finanze/financial-movement-dialog";
+import { formatEur } from "@/lib/format";
 import {
+  getCollaborationOptions,
   getFinancialSplitData,
   getFinancialsByRange,
   getRecentCollaborationPayments,
   type DateRange,
 } from "@/lib/data/fetchers";
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+const formatCurrency = (amount: number) => formatEur(amount, { decimals: 0 });
 
 function labelMonth(k: string) {
   const [y, m] = k.split("-");
@@ -49,10 +46,11 @@ export default async function FinanzePage({ searchParams }: PageProps) {
     startDate: sp.startDate ?? yearStart,
     endDate: sp.endDate ?? today,
   };
-  const [rows, split, paymentAudit] = await Promise.all([
+  const [rows, split, paymentAudit, collaborations] = await Promise.all([
     getFinancialsByRange(range),
     getFinancialSplitData(range),
     getRecentCollaborationPayments(range),
+    getCollaborationOptions(),
   ]);
 
   return (
@@ -120,6 +118,13 @@ export default async function FinanzePage({ searchParams }: PageProps) {
           <p className="mt-1 text-3xl font-bold tabular-nums text-gray-900">
             {formatCurrency(split.overallTotal)}
           </p>
+          {split.otherIncomeTotal > 0 || split.expensesTotal > 0 ? (
+            <p className="mt-1 text-[11px] text-gray-500">
+              {split.otherIncomeTotal > 0 ? `Altre entrate ${formatCurrency(split.otherIncomeTotal)} · ` : ""}
+              Spese {formatCurrency(split.expensesTotal)} ·{" "}
+              <span className="font-medium text-gray-800">Netto {formatCurrency(split.netTotal)}</span>
+            </p>
+          ) : null}
           <div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-100">
             <div className="h-full bg-blue-500" style={{ width: `${split.youtubePct}%` }} />
           </div>
@@ -130,16 +135,30 @@ export default async function FinanzePage({ searchParams }: PageProps) {
         </section>
       </div>
       <div className="ui-enter overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center justify-between gap-2 border-b border-gray-100/80 px-4 py-3">
+          <p className="text-sm font-medium text-gray-900">Movimenti</p>
+          <FinancialMovementDialog collaborations={collaborations} />
+        </div>
         <Table>
           <TableHeader>
             <TableRow className="border-0 border-b border-gray-100/80">
               <TableHead className="text-gray-500">Data</TableHead>
               <TableHead className="text-gray-500">Tipo</TableHead>
               <TableHead className="text-gray-500">Importo</TableHead>
-              <TableHead className="text-gray-500">Collaborazione</TableHead>
+              <TableHead className="text-gray-500">Descrizione / collaborazione</TableHead>
+              <TableHead className="w-[1%]">
+                <span className="sr-only">Azioni</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-6 text-center text-sm text-gray-400">
+                  Nessun movimento nel range selezionato.
+                </TableCell>
+              </TableRow>
+            )}
             {rows.map((r) => (
               <TableRow key={r.id} className="border-0 border-b border-gray-50/90">
                 <TableCell className="whitespace-nowrap text-gray-500">
@@ -150,7 +169,15 @@ export default async function FinanzePage({ searchParams }: PageProps) {
                   {r.amount}
                 </TableCell>
                 <TableCell className="max-w-sm truncate text-gray-500">
-                  {r.collaboration ?? "—"}
+                  {[r.description, r.collaboration].filter(Boolean).join(" · ") || "—"}
+                </TableCell>
+                <TableCell className="w-[1%] p-1 text-right">
+                  {r.manual ? (
+                    <FinancialMovementDialog
+                      collaborations={collaborations}
+                      movement={{ id: r.id, ...r.manual }}
+                    />
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}

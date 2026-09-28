@@ -3,31 +3,16 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const inboxAllowedUserId = String(process.env.INBOX_ALLOWED_USER_ID ?? "").trim();
+const adminUserId = String(
+  process.env.ADMIN_USER_ID ?? process.env.INBOX_ALLOWED_USER_ID ?? ""
+).trim();
 
-const PROTECTED_PREFIXES = [
-  "/dashboard",
-  "/collaborazioni",
-  "/inbox",
-  "/collaborations",
-  "/finanze",
-  "/calendario",
-  "/calendar",
-  "/aziende",
-  "/ricevute",
-];
-
-function isProtectedPath(pathname: string) {
-  return PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-}
-
-export async function middleware(req: NextRequest) {
+/**
+ * Protegge le pagine dell'area gestionale (redirect a /login); il matcher sotto
+ * elenca le sezioni. Le route /api fanno il proprio controllo (`lib/api-auth.ts`).
+ */
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (!isProtectedPath(pathname)) {
-    return NextResponse.next();
-  }
   if (!supabaseUrl || !supabaseAnonKey) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -56,9 +41,9 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (user) {
     if (
-      inboxAllowedUserId &&
+      adminUserId &&
       (pathname === "/inbox" || pathname.startsWith("/inbox/")) &&
-      user.id !== inboxAllowedUserId
+      user.id !== adminUserId
     ) {
       const url = req.nextUrl.clone();
       url.pathname = "/dashboard";
@@ -81,7 +66,6 @@ export const config = {
     "/collaborations/:path*",
     "/finanze/:path*",
     "/calendario/:path*",
-    "/calendar/:path*",
     "/aziende/:path*",
     "/ricevute/:path*",
   ],

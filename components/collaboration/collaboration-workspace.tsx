@@ -1,12 +1,13 @@
 "use client";
 
+import { formatEur } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { setCollaborationStatus } from "@/lib/actions/collaboration-status";
-import { setCollaborationPaid } from "@/lib/actions/collaboration-payment";
 import {
   addCollaborationPayment,
   deleteCollaborationPayment,
+  settleCollaboration,
   updateCollaborationPayment,
 } from "@/lib/actions/collaboration-payments";
 import {
@@ -24,7 +25,8 @@ import {
   EVENT_TYPE_ICONS,
   EVENT_TYPE_OPTIONS,
 } from "@/lib/collab-event-types";
-import { COLLAB_FILES_BUCKET, makeCollaborationObjectPath } from "@/lib/storage-constants";
+import { uploadCollaborationFile } from "@/lib/storage-upload";
+import { DELIV_TYPES } from "@/lib/collaboration-form-shared";
 import type {
   CollaborationDetail,
   CollaborationEventRow,
@@ -68,7 +70,6 @@ import {
 import Link from "next/link";
 import type { EventType } from "@/lib/collab-event-types";
 
-const deliverableTypes = ["Video YouTube", "Reel IG", "Story"] as const;
 
 const formatEventDate = (iso: string) => {
   try {
@@ -119,6 +120,10 @@ function renderTextWithLinks(text: string | null | undefined) {
 }
 
 /** Valore per input `datetime-local` in fuso orario locale. */
+function toYmd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function toLocalInputDateTimeValue(d: Date) {
   const t = d.getTime() - d.getTimezoneOffset() * 60_000;
   return new Date(t).toISOString().slice(0, 16);
@@ -147,7 +152,7 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [delivType, setDelivType] = useState<(typeof deliverableTypes)[number]>(
+  const [delivType, setDelivType] = useState<(typeof DELIV_TYPES)[number]>(
     "Reel IG"
   );
   const [delivDate, setDelivDate] = useState("");
@@ -159,10 +164,9 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
   const [editCollabOpen, setEditCollabOpen] = useState(false);
   const [visibleEventsCount, setVisibleEventsCount] = useState(10);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
+  const [paymentDate, setPaymentDate] = useState(() => toYmd(new Date()));
   const [paymentNote, setPaymentNote] = useState("");
+  const [settleError, setSettleError] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editingPaymentAmount, setEditingPaymentAmount] = useState("");
@@ -190,13 +194,13 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
     [collab.id, router]
   );
 
-  useEffect(() => {
+  // Lo stato arriva dal server dopo refresh: riallinea la select locale.
+  // (Il cambio di collaborazione rimonta il componente: vedi `key` nella pagina.)
+  const [prevStatus, setPrevStatus] = useState(collab.status);
+  if (prevStatus !== collab.status) {
+    setPrevStatus(collab.status);
     setStatusLocal(collab.status);
-  }, [collab.status]);
-
-  useEffect(() => {
-    setVisibleEventsCount(10);
-  }, [collab.id]);
+  }
 
   useEffect(() => {
     if (notesDebounce.current) clearTimeout(notesDebounce.current);
@@ -209,25 +213,6 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
     };
   }, [notes, collab.general_notes, flushSaveNotes]);
 
-  const uploadToStorage = async (f: File) => {
-    setFormError(null);
-    const objectPath = makeCollaborationObjectPath(collab.id, f);
-    const { data: up, error: upErr } = await supabase.storage
-      .from(COLLAB_FILES_BUCKET)
-      .upload(objectPath, f, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: f.type || undefined,
-      });
-    if (upErr) {
-      throw new Error(upErr.message);
-    }
-    const { data: pub } = supabase.storage
-      .from(COLLAB_FILES_BUCKET)
-      .getPublicUrl(up.path);
-    return pub.publicUrl;
-  };
-
   const submitEvent = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -235,15 +220,15 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
       void (async () => {
         setUploading(true);
         try {
-          let fileUrl: string | null = null;
+          let filePath: string | null = null;
           if (file) {
-            fileUrl = await uploadToStorage(file);
+            filePath = await uploadCollaborationFile(collab.id, file);
           }
           const res = await addCollaborationEvent(
             collab.id,
             eventType,
             eventDesc,
-            fileUrl,
+            filePath,
             new Date(eventAt).toISOString()
           );
           if (!res.ok) {
@@ -324,8 +309,7 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
     [collab.brief_text, collab.id]
   );
 
-  const eur = (n: number) =>
-    new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+  const eur = (n: number) => formatEur(n);
 
   return (
     <div className="min-h-0 text-gray-900">
@@ -401,60 +385,47 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
 
             <div className="mt-2.5 border-t border-gray-100 pt-2">
               {collab.paid_at ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                    <CheckCircle2 className="size-3.5" />
-                    Saldato il{" "}
-                    {new Date(collab.paid_at).toLocaleDateString("it-IT", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"
+                  title="Stato calcolato dai pagamenti: per riaprire modifica o elimina un pagamento"
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  Saldato il{" "}
+                  {new Date(collab.paid_at).toLocaleDateString("it-IT", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     className="h-7 rounded-full border-gray-200 px-2.5 text-xs"
-                    disabled={pending}
+                    disabled={pending || !collab.agreed_fee_value || !collab.remaining_due}
                     onClick={() => {
+                      const due = collab.remaining_due ?? 0;
+                      if (!window.confirm(`Registrare oggi un pagamento di ${eur(due)} a saldo?`)) return;
+                      setSettleError(null);
                       start(() => {
                         void (async () => {
-                          const r = await setCollaborationPaid(collab.id, false);
-                          if (r.ok) {
-                            router.refresh();
-                          } else if (process.env.NODE_ENV === "development") {
-                            console.error(r.error);
-                          }
+                          const r = await settleCollaboration({
+                            collaborationId: collab.id,
+                            paidAt: toYmd(new Date()),
+                          });
+                          if (r.ok) router.refresh();
+                          else setSettleError(r.error);
                         })();
                       });
                     }}
                   >
-                    Riapri saldo
+                    Registra saldo
+                    {collab.remaining_due ? ` · ${eur(collab.remaining_due)}` : ""}
                   </Button>
+                  {settleError ? <span className="text-xs text-red-600">{settleError}</span> : null}
                 </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 rounded-full border-gray-200 px-2.5 text-xs"
-                  disabled={pending || !collab.agreed_fee_value}
-                  onClick={() => {
-                    start(() => {
-                      void (async () => {
-                        const r = await setCollaborationPaid(collab.id, true);
-                        if (r.ok) {
-                          router.refresh();
-                        } else if (process.env.NODE_ENV === "development") {
-                          console.error(r.error);
-                        }
-                      })();
-                    });
-                  }}
-                >
-                  Segna saldata
-                </Button>
               )}
             </div>
           </div>
@@ -524,9 +495,9 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
                             <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
                               {renderTextWithLinks(ev.description)}
                             </p>
-                            {ev.attached_file_url && (
+                            {ev.attachment_href && (
                               <a
-                                href={ev.attached_file_url}
+                                href={ev.attachment_href}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
@@ -1119,14 +1090,14 @@ export function CollaborationWorkspace({ data, brandOptions, receipts }: Props) 
                   <Select
                     value={delivType}
                     onValueChange={(v) =>
-                      setDelivType(v as (typeof deliverableTypes)[number])
+                      setDelivType(v as (typeof DELIV_TYPES)[number])
                     }
                   >
                     <SelectTrigger className="w-full rounded-xl border-0 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {deliverableTypes.map((t) => (
+                      {DELIV_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>
                           {t}
                         </SelectItem>

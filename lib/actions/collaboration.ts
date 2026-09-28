@@ -4,18 +4,24 @@ import { revalidatePath } from "next/cache";
 import { isDeliverableWorkflowStatus } from "@/lib/deliverable-statuses";
 import { revalidateCollaborationPaths } from "@/lib/revalidate-collab-paths";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
+import { isValidUuid } from "@/lib/is-uuid";
 import { EVENT_TYPES, type EventType } from "@/lib/collab-event-types";
+import { isDeliverableType } from "@/lib/collaboration-form-shared";
 
 const path = (id: string) => `/collaborations/${id}`;
-
-const DELIV_TYPES = ["Video YouTube", "Reel IG", "Story"] as const;
 
 function isEventType(v: string): v is EventType {
   return (EVENT_TYPES as readonly string[]).includes(v);
 }
 
-function isDeliverableType(v: string): v is (typeof DELIV_TYPES)[number] {
-  return (DELIV_TYPES as readonly string[]).includes(v);
+/** Il path deve appartenere alla cartella della collaborazione (la RLS di Storage fa il resto). */
+function normalizeAttachmentPath(collaborationId: string, raw: string | null | undefined) {
+  const p = (raw ?? "").trim();
+  if (!p) return { ok: true as const, path: null };
+  if (!p.startsWith(`collabs/${collaborationId}/`) || p.includes("..")) {
+    return { ok: false as const, error: "Allegato non valido" };
+  }
+  return { ok: true as const, path: p };
 }
 
 function normalizeContentUrl(raw: string | null | undefined): string | null {
@@ -33,6 +39,9 @@ export async function updateGeneralNotes(
   collaborationId: string,
   generalNotes: string
 ) {
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { error } = await supabase
     .from("collaborations")
@@ -50,15 +59,20 @@ export async function addCollaborationEvent(
   collaborationId: string,
   eventType: string,
   description: string,
-  attachedFileUrl: string | null,
+  attachedFilePath: string | null,
   eventAtIso: string
 ) {
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
   if (!isEventType(eventType)) {
     return { ok: false as const, error: "Tipo evento non valido" };
   }
+  const att = normalizeAttachmentPath(collaborationId, attachedFilePath);
+  if (!att.ok) return att;
   const desc = (description || "").trim();
   const finalDescription =
-    desc || (attachedFileUrl ? "File caricato" : null);
+    desc || (att.path ? "File caricato" : null);
   if (!finalDescription) {
     return {
       ok: false as const,
@@ -76,7 +90,8 @@ export async function addCollaborationEvent(
     user_id: userId,
     event_type: eventType,
     description: finalDescription,
-    attached_file_url: attachedFileUrl,
+    attached_file_path: att.path,
+    attached_file_url: null,
     event_at: at.toISOString(),
   });
   if (error) {
@@ -90,16 +105,22 @@ export type UpsertEventInput = {
   eventType: string;
   description: string;
   eventAtIso: string;
+  /** Oggetto nel bucket privato. */
+  attachedFilePath: string | null;
+  /** Link esterno legacy (eventi creati prima del bucket privato). */
   attachedFileUrl: string | null;
 };
 
-function normalizeEventInput(input: UpsertEventInput) {
+function normalizeEventInput(collaborationId: string, input: UpsertEventInput) {
   if (!isEventType(input.eventType)) {
     return { ok: false as const, error: "Tipo evento non valido" };
   }
+  const att = normalizeAttachmentPath(collaborationId, input.attachedFilePath);
+  if (!att.ok) return att;
+  const legacyUrl = att.path ? null : input.attachedFileUrl?.trim() || null;
   const desc = (input.description || "").trim();
   const finalDescription =
-    desc || (input.attachedFileUrl ? "File caricato" : null);
+    desc || (att.path || legacyUrl ? "File caricato" : null);
   if (!finalDescription) {
     return {
       ok: false as const,
@@ -117,7 +138,8 @@ function normalizeEventInput(input: UpsertEventInput) {
       event_type: input.eventType,
       description: finalDescription,
       event_at: at.toISOString(),
-      attached_file_url: input.attachedFileUrl,
+      attached_file_path: att.path,
+      attached_file_url: legacyUrl,
     },
   };
 }
@@ -127,7 +149,10 @@ export async function updateCollaborationEvent(
   eventId: string,
   input: UpsertEventInput
 ) {
-  const norm = normalizeEventInput(input);
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
+  const norm = normalizeEventInput(collaborationId, input);
   if (!norm.ok) {
     return norm;
   }
@@ -154,6 +179,9 @@ export async function deleteCollaborationEvent(
   collaborationId: string,
   eventId: string
 ) {
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   const { data, error } = await supabase
     .from("collaboration_events")
@@ -180,6 +208,9 @@ export async function addDeliverable(
   status: string = "da girare",
   contentUrl?: string
 ) {
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
   if (!isDeliverableType(type)) {
     return { ok: false as const, error: "Tipo contenuto non valido" };
   }
@@ -218,6 +249,9 @@ export async function updateDeliverable(
   deliverableId: string,
   input: UpdateDeliverableInput
 ) {
+  if (!isValidUuid(collaborationId)) {
+    return { ok: false as const, error: "ID collaborazione non valido" };
+  }
   if (!isDeliverableType(input.type)) {
     return { ok: false as const, error: "Tipo contenuto non valido" };
   }

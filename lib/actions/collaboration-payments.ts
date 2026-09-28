@@ -96,3 +96,53 @@ export async function deleteCollaborationPayment(input: {
   revalidateCollaborationPaths(input.collaborationId);
   return { ok: true };
 }
+
+/** Registra un pagamento pari al residuo: la collaborazione risulta saldata. */
+export async function settleCollaboration(input: {
+  collaborationId: string;
+  paidAt: string;
+}): Promise<Result> {
+  if (!isValidUuid(input.collaborationId)) {
+    return { ok: false, error: "ID collaborazione non valido" };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paidAt)) {
+    return { ok: false, error: "Data pagamento non valida" };
+  }
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
+  const [collabRes, payRes] = await Promise.all([
+    supabase
+      .from("collaborations")
+      .select("agreed_fee")
+      .eq("id", input.collaborationId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("collaboration_payments")
+      .select("amount")
+      .eq("collaboration_id", input.collaborationId)
+      .eq("user_id", userId),
+  ]);
+  if (collabRes.error) return { ok: false, error: collabRes.error.message };
+  const agreed = Number(collabRes.data?.agreed_fee ?? 0);
+  if (!(agreed > 0)) {
+    return { ok: false, error: "Imposta prima il compenso pattuito" };
+  }
+  const paid = (payRes.data ?? []).reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
+  const remaining = Math.round((agreed - paid) * 100) / 100;
+  if (remaining <= 0) {
+    await refreshPaidFlag(input.collaborationId);
+    revalidateCollaborationPaths(input.collaborationId);
+    return { ok: true };
+  }
+  const { error } = await supabase.from("collaboration_payments").insert({
+    collaboration_id: input.collaborationId,
+    user_id: userId,
+    amount: remaining,
+    paid_at: input.paidAt,
+    note: paid > 0 ? "Saldo" : "Pagamento completo",
+  });
+  if (error) return { ok: false, error: error.message };
+  await refreshPaidFlag(input.collaborationId);
+  revalidateCollaborationPaths(input.collaborationId);
+  return { ok: true };
+}

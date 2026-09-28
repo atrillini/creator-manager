@@ -126,7 +126,6 @@ export async function updateBrand(
   revalidatePath("/collaborazioni");
   revalidatePath("/dashboard");
   revalidatePath("/calendario");
-  revalidatePath("/calendar");
   revalidatePath("/ricevute");
   return { ok: true };
 }

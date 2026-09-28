@@ -1,8 +1,12 @@
 "use client";
 
-import type { MockCollaboration } from "@/lib/data/mock";
 import { isValidUuid } from "@/lib/is-uuid";
-import { KANBAN_COLUMNS, type KanbanStatus } from "@/lib/types";
+import {
+  KANBAN_COLUMNS,
+  REJECTED_KANBAN_COLUMN,
+  type KanbanCollaboration,
+  type KanbanStatus,
+} from "@/lib/types";
 import { moveCollaborationToColumn } from "@/lib/actions/collaboration-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -28,13 +32,15 @@ import { useId, useState, useTransition } from "react";
 const COL_PREFIX = "col-";
 
 type Props = {
-  collaborations: MockCollaboration[];
+  collaborations: KanbanCollaboration[];
+  /** Mostra la colonna "Rifiutate" (altrimenti le rifiutate sono nascoste). */
+  showRejected?: boolean;
 };
 
 function columnItems(
-  all: MockCollaboration[],
+  all: KanbanCollaboration[],
   status: KanbanStatus
-): MockCollaboration[] {
+): KanbanCollaboration[] {
   return all.filter((c) => c.kanbanStatus === status);
 }
 
@@ -45,25 +51,7 @@ function isColId(over: string) {
   return over.startsWith(COL_PREFIX) ? (over.slice(COL_PREFIX.length) as KanbanStatus) : null;
 }
 
-function MockRow({ c }: { c: MockCollaboration }) {
-  return (
-    <div className="w-full pl-0.5">
-      <div
-        className="cursor-not-allowed rounded-xl bg-white/80 px-2 py-1.5 opacity-90 ring-1 ring-gray-100"
-        title="Dato di esempio, non tracciabile in Supabase"
-      >
-        <p className="line-clamp-2 text-xs font-medium leading-tight text-gray-900">
-          {c.title}
-        </p>
-        <p className="mt-0.5 line-clamp-1 text-[10px] text-amber-700/90">
-          Demo: crea un deal in DB per trascinare
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function DraggableRow({ c, droppableId }: { c: MockCollaboration; droppableId: string }) {
+function DraggableRow({ c, droppableId }: { c: KanbanCollaboration; droppableId: string }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable(
     { id: c.id, data: { droppable: droppableId } }
   );
@@ -72,9 +60,6 @@ function DraggableRow({ c, droppableId }: { c: MockCollaboration; droppableId: s
     zIndex: isDragging ? 50 : undefined,
     position: (isDragging ? "relative" : undefined) as "relative" | undefined,
   };
-  if (!isValidUuid(c.id)) {
-    return <MockRow c={c} />;
-  }
   return (
     <div
       ref={setNodeRef}
@@ -124,7 +109,7 @@ function DraggableRow({ c, droppableId }: { c: MockCollaboration; droppableId: s
 }
 
 /** Compatta, mostrata nel DragOverlay (evita card “enorme” sotto al cursore) */
-function KanbanCardPreview({ c }: { c: MockCollaboration }) {
+function KanbanCardPreview({ c }: { c: KanbanCollaboration }) {
   return (
     <div className="w-[200px] max-w-[min(200px,88vw)] cursor-grabbing select-none rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 shadow-md">
       <p className="line-clamp-2 text-xs font-medium leading-tight text-gray-900">
@@ -169,11 +154,12 @@ function DroppableColumnContent({
 
 const COMPLETED_COLLAPSE_THRESHOLD = 20;
 
-export function CollaborationKanban({ collaborations }: Props) {
+export function CollaborationKanban({ collaborations, showRejected = false }: Props) {
+  const columns = showRejected ? [...KANBAN_COLUMNS, REJECTED_KANBAN_COLUMN] : KANBAN_COLUMNS;
   const dndId = useId();
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [activeDrag, setActiveDrag] = useState<MockCollaboration | null>(null);
+  const [activeDrag, setActiveDrag] = useState<KanbanCollaboration | null>(null);
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -230,8 +216,13 @@ export function CollaborationKanban({ collaborations }: Props) {
       }}
       onDragEnd={onDragEnd}
     >
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {KANBAN_COLUMNS.map((col) => {
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 gap-3 md:grid-cols-2",
+          showRejected ? "lg:grid-cols-3 xl:grid-cols-5" : "lg:grid-cols-4"
+        )}
+      >
+        {columns.map((col) => {
           const items = columnItems(collaborations, col.id);
           const cId = colId(col.id);
           const isCompleted = col.id === "completate";

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { ExternalLink, Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 
 const deliverableTypes = ["Video YouTube", "Reel IG", "Story"] as const;
 
@@ -67,26 +67,16 @@ export function DeliverableRowEditor({ collaborationId, row }: Props) {
   );
   const [contentUrl, setContentUrl] = useState(row.content_url ?? "");
 
-  useEffect(() => {
+  function openDialog() {
+    setErr(null);
     setType(row.type);
     setPublishDate(row.publish_date ?? "");
     setStatus(
       isDeliverableWorkflowStatus(row.status) ? row.status : "da girare"
     );
     setContentUrl(row.content_url ?? "");
-  }, [row.id, row.type, row.publish_date, row.status, row.content_url]);
-
-  useEffect(() => {
-    if (open) {
-      setErr(null);
-      setType(row.type);
-      setPublishDate(row.publish_date ?? "");
-      setStatus(
-        isDeliverableWorkflowStatus(row.status) ? row.status : "da girare"
-      );
-      setContentUrl(row.content_url ?? "");
-    }
-  }, [open, row]);
+    setOpen(true);
+  }
 
   const save = () => {
     if (!publishDate.trim()) {
@@ -166,7 +156,7 @@ export function DeliverableRowEditor({ collaborationId, row }: Props) {
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0 text-gray-400 opacity-80 transition-opacity hover:bg-gray-200/50 hover:text-blue-600 group-hover:opacity-100"
-          onClick={() => setOpen(true)}
+          onClick={openDialog}
           aria-label="Modifica scadenza"
         >
           <Pencil className="size-3.5" />

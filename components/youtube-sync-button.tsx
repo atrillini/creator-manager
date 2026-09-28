@@ -3,7 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
 
 type Props = {
   className?: string;
@@ -21,24 +22,7 @@ export function YouTubeSyncButton({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (pending) {
-      const startedAt = Date.now();
-      setElapsedMs(0);
-      tickRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - startedAt);
-      }, 250);
-    } else {
-      if (tickRef.current) clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [pending]);
+  const elapsedSeconds = useElapsedSeconds(pending);
 
   const onSync = () => {
     setError(null);
@@ -58,8 +42,6 @@ export function YouTubeSyncButton({
       })();
     });
   };
-
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   return (
     <div className="space-y-1.5">

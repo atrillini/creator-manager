@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEur } from "@/lib/format";
 import { createCollaboration } from "@/lib/actions/collaboration-create";
 import { COLLAB_STATUS_OPTIONS } from "@/lib/collab-statuses";
 import {
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { Gift, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 
 export type BrandOption = { id: string; name: string };
 
@@ -65,12 +66,9 @@ function pickDefaultBrandId(
   return list[0]?.id ?? "";
 }
 
-function formatEur(n: number) {
+function formatFeeTotal(n: number) {
   if (!Number.isFinite(n) || n < 0) return "—";
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(n);
+  return formatEur(n);
 }
 
 export function CreateCollaborationDialog({
@@ -105,12 +103,23 @@ export function CreateCollaborationDialog({
   const briefId = useId();
   const open = controlledOpen ?? internalOpen;
 
-  useEffect(() => {
+  const [prevBrands, setPrevBrands] = useState(brands);
+  if (brands !== prevBrands) {
+    setPrevBrands(brands);
     setBrandId((cur) => pickDefaultBrandId(brands, cur));
-  }, [brands]);
+  }
 
-  useEffect(() => {
-    if (!open) return;
+  // Applica la bozza all'apertura (o quando cambia la bozza a dialog aperto).
+  const [prevOpenState, setPrevOpenState] = useState<{ open: boolean; draft: typeof initialDraft }>({
+    open: false,
+    draft: undefined,
+  });
+  if (open !== prevOpenState.open || initialDraft !== prevOpenState.draft) {
+    setPrevOpenState({ open, draft: initialDraft });
+    if (open) applyDraft();
+  }
+
+  function applyDraft() {
     if (!initialDraft) {
       setInitialTimelineNote("");
       setInitialPayments([]);
@@ -136,7 +145,7 @@ export function CreateCollaborationDialog({
     if (initialDraft.initialPayments) {
       setInitialPayments(initialDraft.initialPayments);
     }
-  }, [open, initialDraft, brands]);
+  }
 
   function setOpenSafe(next: boolean) {
     if (onOpenChange) onOpenChange(next);
@@ -407,7 +416,7 @@ export function CreateCollaborationDialog({
                 >
                   <p className="text-xs font-medium text-gray-500">Totale contrattuale</p>
                   <p className="text-lg font-semibold tabular-nums text-gray-900">
-                    {periodicTotal > 0 ? formatEur(periodicTotal) : "—"}
+                    {periodicTotal > 0 ? formatFeeTotal(periodicTotal) : "—"}
                   </p>
                 </div>
               </div>

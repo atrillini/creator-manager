@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CalendarRange, Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 
 export type RangePreset =
   | "current_year"
@@ -25,6 +25,8 @@ type Props = {
   filteredCount: number;
   /** Totale record dell'utente, senza filtri (lato server). */
   totalCount: number;
+  /** Rifiutate nel periodo filtrato (nascoste di default). */
+  rejectedCount: number;
 };
 
 function parseRange(raw: string | null): RangePreset {
@@ -34,7 +36,7 @@ function parseRange(raw: string | null): RangePreset {
   return "current_year";
 }
 
-export function CollaborazioniFilters({ filteredCount, totalCount }: Props) {
+export function CollaborazioniFilters({ filteredCount, totalCount, rejectedCount }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
@@ -44,20 +46,25 @@ export function CollaborazioniFilters({ filteredCount, totalCount }: Props) {
   const currentFrom = searchParams.get("from") ?? "";
   const currentTo = searchParams.get("to") ?? "";
   const currentQuery = searchParams.get("q") ?? "";
+  const showRejected = searchParams.get("rifiutate") === "1";
 
   const [query, setQuery] = useState(currentQuery);
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(currentFrom);
   const [customTo, setCustomTo] = useState(currentTo);
 
-  useEffect(() => {
+  // Riallinea i campi quando cambia l'URL (es. "Pulisci filtri" o navigazione).
+  const [prevUrlState, setPrevUrlState] = useState({ currentQuery, currentFrom, currentTo });
+  if (
+    prevUrlState.currentQuery !== currentQuery ||
+    prevUrlState.currentFrom !== currentFrom ||
+    prevUrlState.currentTo !== currentTo
+  ) {
+    setPrevUrlState({ currentQuery, currentFrom, currentTo });
     setQuery(currentQuery);
-  }, [currentQuery]);
-
-  useEffect(() => {
     setCustomFrom(currentFrom);
     setCustomTo(currentTo);
-  }, [currentFrom, currentTo]);
+  }
 
   const navigate = (params: URLSearchParams) => {
     const qs = params.toString();
@@ -87,6 +94,13 @@ export function CollaborazioniFilters({ filteredCount, totalCount }: Props) {
     if (customTo) sp.set("to", customTo);
     else sp.delete("to");
     setCustomOpen(false);
+    navigate(sp);
+  };
+
+  const toggleRejected = () => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (showRejected) sp.delete("rifiutate");
+    else sp.set("rifiutate", "1");
     navigate(sp);
   };
 
@@ -238,6 +252,17 @@ export function CollaborazioniFilters({ filteredCount, totalCount }: Props) {
             </div>
           </PopoverContent>
         </Popover>
+        <Button
+          type="button"
+          variant="outline"
+          className={chipClass(showRejected)}
+          onClick={toggleRejected}
+          disabled={pending}
+          aria-pressed={showRejected}
+        >
+          {showRejected ? "Nascondi rifiutate" : "Mostra rifiutate"}
+          {rejectedCount > 0 ? ` (${rejectedCount})` : ""}
+        </Button>
       </div>
 
       <div className="relative ml-auto flex min-w-[12rem] flex-1 items-center sm:flex-initial">

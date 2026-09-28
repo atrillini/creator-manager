@@ -1,6 +1,8 @@
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 import { mapStatusToKanban } from "@/lib/types";
-import * as mock from "./mock";
+import { formatEur, formatEurOrNull, toNumberOrNull } from "@/lib/format";
+import { isExpenseType, isManualFinancialType } from "@/lib/financial-types";
+import type { KanbanCollaboration } from "@/lib/types";
 
 type CollabRow = {
   id: string;
@@ -18,24 +20,6 @@ function brandName(brand: CollabRow["brands"]): string {
   return brand.name;
 }
 
-function feeString(v: number | string | null | undefined): string | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === "string") {
-    if (v.trim() === "") return null;
-    const n = Number(v);
-    if (!Number.isNaN(n))
-      return new Intl.NumberFormat("it-IT", {
-        style: "currency",
-        currency: "EUR",
-      }).format(n);
-    return v;
-  }
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(v);
-}
-
 export type GetCollaborationsOptions = {
   /** ISO date inclusivo (YYYY-MM-DD), confrontato con `created_at`. */
   startDate?: string;
@@ -46,15 +30,7 @@ export type GetCollaborationsOptions = {
 };
 
 export type GetCollaborationsResult = {
-  items: {
-    id: string;
-    title: string;
-    brandName: string;
-    agreedFee: string | null;
-    isGiveaway: boolean;
-    giveawayValue: string | null;
-    kanbanStatus: ReturnType<typeof mapStatusToKanban>;
-  }[];
+  items: KanbanCollaboration[];
   /** Totale collaborazioni dell'utente (senza filtri), per mostrare "X di Y". */
   totalCount: number;
 };
@@ -101,9 +77,9 @@ export async function getCollaborations(
         id: c.id,
         title: c.brief_text?.trim() || "Senza titolo",
         brandName: brandName(c.brands),
-        agreedFee: feeString(c.agreed_fee),
+        agreedFee: formatEurOrNull(c.agreed_fee),
         isGiveaway: c.is_giveaway === true,
-        giveawayValue: feeString(c.giveaway_value),
+        giveawayValue: formatEurOrNull(c.giveaway_value),
         kanbanStatus: mapStatusToKanban(c.status),
       };
     })
@@ -233,116 +209,142 @@ export async function getAziendeTableBrands(): Promise<AziendeBrandRow[]> {
   });
 }
 
-export async function getDashboardStats() {
-  const _s = await createSupabaseClient();
-  void _s;
-  return mock.getMockDashboardStats();
-}
-
-export async function getFinancials() {
-  return getFinancialsByRange();
-}
-
 export type DateRange = {
   startDate?: string;
   endDate?: string;
 };
 
-export async function getFinancialsByRange(range?: DateRange) {
+export type FinancialRow = {
+  id: string;
+  type: string;
+  /** Importo con segno, già formattato. */
+  amount: string;
+  date: string;
+  collaboration: string | null;
+  description: string | null;
+  /** Presente solo per i movimenti manuali (modificabili). */
+  manual: {
+    type: string;
+    amount: number;
+    date: string;
+    description: string;
+    collaborationId: string | null;
+  } | null;
+};
+
+type CollabBrandJoin =
+  | {
+      brief_text: string | null;
+      brands: { name: string } | { name: string }[] | null;
+    }
+  | {
+      brief_text: string | null;
+      brands: { name: string } | { name: string }[] | null;
+    }[]
+  | null;
+
+function collabLabel(join: CollabBrandJoin): string | null {
+  const one = Array.isArray(join) ? join[0] : join;
+  const collab = one?.brief_text?.trim();
+  const brandJoin = one?.brands;
+  const brand = Array.isArray(brandJoin) ? brandJoin[0]?.name : brandJoin?.name;
+  if (collab) return brand ? `${collab} · ${brand}` : collab;
+  return brand ?? null;
+}
+
+function formatDay(iso: string) {
+  return new Date(iso + "T12:00:00").toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/**
+ * Movimenti in tabella Finanze: YouTube aggregato per mese (già mensile in DB),
+ * movimenti manuali uno per riga. Le spese hanno segno negativo.
+ */
+export async function getFinancialsByRange(range?: DateRange): Promise<FinancialRow[]> {
   const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
   let query = supabase
     .from("financials")
-    .select("id, type, amount, date, collaborations ( brief_text, brands ( name ) )")
+    .select(
+      "id, type, amount, date, description, collaboration_id, collaborations ( brief_text, brands ( name ) )"
+    )
     .eq("user_id", userId)
     .order("date", { ascending: false });
   if (range?.startDate) query = query.gte("date", range.startDate);
   if (range?.endDate) query = query.lte("date", range.endDate);
   const { data, error } = await query;
-  if (error || !data) {
-    if (process.env.NODE_ENV === "development" && error) {
-      console.warn("[CreatorCRM] financials:", error.message);
-    }
-    return mock.getMockFinancials();
+  if (error) {
+    console.warn("[CreatorCRM] financials:", error.message);
+    return [];
   }
+
   const monthlyYoutube = new Map<string, number>();
-  const otherRows: {
-    id: string;
-    type: string;
-    amount: string;
-    date: string;
-    sortDate: string;
-    collaboration: string | null;
-  }[] = [];
-  for (const row of data as {
+  const rows: (FinancialRow & { sortDate: string })[] = [];
+  for (const row of (data ?? []) as {
     id: string;
     type: string;
     amount: number | string | null;
     date: string;
-    collaborations:
-      | {
-          brief_text: string | null;
-          brands: { name: string } | { name: string }[] | null;
-        }
-      | {
-          brief_text: string | null;
-          brands: { name: string } | { name: string }[] | null;
-        }[]
-      | null;
+    description: string | null;
+    collaboration_id: string | null;
+    collaborations: CollabBrandJoin;
   }[]) {
-    const amountNum = Number(row.amount ?? 0);
+    const amountNum = Math.abs(toNumberOrNull(row.amount) ?? 0);
+    const isoDate = String(row.date);
     if (row.type === "Entrata YouTube") {
-      const month = String(row.date).slice(0, 7);
+      const month = isoDate.slice(0, 7);
       monthlyYoutube.set(month, (monthlyYoutube.get(month) ?? 0) + amountNum);
       continue;
     }
-    const amount = new Intl.NumberFormat("it-IT", {
-      style: "currency",
-      currency: "EUR",
-      signDisplay: amountNum >= 0 ? "always" : "auto",
-    }).format(amountNum);
-    const collabJoin = row.collaborations;
-    const one = Array.isArray(collabJoin) ? collabJoin[0] : collabJoin;
-    const collab = one?.brief_text;
-    const brandJoin = one?.brands;
-    const brand = Array.isArray(brandJoin) ? brandJoin[0]?.name : brandJoin?.name;
-    const isoDate = String(row.date);
-    otherRows.push({
+    const signed = isExpenseType(row.type) ? -amountNum : amountNum;
+    rows.push({
       id: row.id,
       type: row.type,
-      amount,
-      date: new Date(isoDate + "T12:00:00").toLocaleDateString("it-IT", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }),
+      amount: formatEur(signed, { signed: true }),
+      date: formatDay(isoDate),
       sortDate: isoDate,
-      collaboration: collab
-        ? brand
-          ? `${collab} · ${brand}`
-          : collab
-        : brand ?? null,
+      collaboration: collabLabel(row.collaborations),
+      description: row.description,
+      manual: isManualFinancialType(row.type)
+        ? {
+            type: row.type,
+            amount: amountNum,
+            date: isoDate,
+            description: row.description ?? "",
+            collaborationId: row.collaboration_id,
+          }
+        : null,
     });
   }
-  const youtubeRows = [...monthlyYoutube.entries()]
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([month, amount], idx) => ({
-      id: `yt-month-${month}-${idx}`,
+  for (const [month, amount] of monthlyYoutube) {
+    rows.push({
+      id: `yt-month-${month}`,
       type: "Entrata YouTube",
-      amount: new Intl.NumberFormat("it-IT", {
-        style: "currency",
-        currency: "EUR",
-        signDisplay: amount >= 0 ? "always" : "auto",
-      }).format(amount),
+      amount: formatEur(amount, { signed: true }),
       date: new Date(`${month}-01T12:00:00`).toLocaleDateString("it-IT", {
         month: "short",
         year: "numeric",
       }),
       sortDate: `${month}-31`,
-      collaboration: "Aggregato mensile",
-    }));
-  return [...youtubeRows, ...otherRows]
+      collaboration: null,
+      description: "Aggregato mensile (sync YouTube)",
+      manual: null,
+    });
+  }
+  return rows
     .sort((a, b) => b.sortDate.localeCompare(a.sortDate))
-    .map(({ sortDate: _sortDate, ...row }) => row);
+    .map((r) => ({
+      id: r.id,
+      type: r.type,
+      amount: r.amount,
+      date: r.date,
+      collaboration: r.collaboration,
+      description: r.description,
+      manual: r.manual,
+    }));
 }
 
 export type YoutubeStatsRow = {
@@ -380,6 +382,11 @@ export async function getLatestYoutubeStats(): Promise<YoutubeStatsRow | null> {
 export type FinancialSplitData = {
   youtubeTotal: number;
   sponsorTotal: number;
+  /** "Altra entrata" (affiliazioni ecc.). */
+  otherIncomeTotal: number;
+  expensesTotal: number;
+  /** Entrate totali meno spese. */
+  netTotal: number;
   sponsorForecastTotal: number;
   sponsorActualPct: number;
   overallTotal: number;
@@ -399,8 +406,7 @@ export async function getFinancialSplitData(range?: DateRange): Promise<Financia
   let finQuery = supabase
     .from("financials")
     .select("type, amount, date")
-    .eq("user_id", userId)
-    .in("type", ["Entrata YouTube", "Entrata Sponsor"]);
+    .eq("user_id", userId);
   if (range?.startDate) finQuery = finQuery.gte("date", range.startDate);
   if (range?.endDate) finQuery = finQuery.lte("date", range.endDate);
 
@@ -430,16 +436,22 @@ export async function getFinancialSplitData(range?: DateRange): Promise<Financia
   const sMap = new Map<string, number>();
   let youtubeTotal = 0;
   let sponsorFromFinancials = 0;
+  let otherIncomeTotal = 0;
+  let expensesTotal = 0;
 
   for (const row of (finRes.data ?? []) as {
     type: string;
     amount: number | string | null;
     date: string;
   }[]) {
-    const amount = Number(row.amount ?? 0);
+    const amount = Math.abs(Number(row.amount ?? 0));
     if (!Number.isFinite(amount) || amount <= 0) continue;
     const key = monthKey(row.date);
-    if (row.type === "Entrata YouTube") {
+    if (isExpenseType(row.type)) {
+      expensesTotal += amount;
+    } else if (row.type === "Altra entrata") {
+      otherIncomeTotal += amount;
+    } else if (row.type === "Entrata YouTube") {
       youtubeTotal += amount;
       yMap.set(key, (yMap.get(key) ?? 0) + amount);
     } else if (row.type === "Entrata Sponsor") {
@@ -469,9 +481,9 @@ export async function getFinancialSplitData(range?: DateRange): Promise<Financia
     sponsorForecastTotal > 0
       ? Math.min(100, Math.round((sponsorTotal / sponsorForecastTotal) * 100))
       : 0;
-  const overallTotal = youtubeTotal + sponsorTotal;
+  const overallTotal = youtubeTotal + sponsorTotal + otherIncomeTotal;
   const youtubePct = overallTotal > 0 ? Math.round((youtubeTotal / overallTotal) * 100) : 0;
-  const sponsorPct = overallTotal > 0 ? 100 - youtubePct : 0;
+  const sponsorPct = overallTotal > 0 ? Math.round((sponsorTotal / overallTotal) * 100) : 0;
 
   const trendToArray = (map: Map<string, number>) =>
     [...map.entries()]
@@ -482,6 +494,9 @@ export async function getFinancialSplitData(range?: DateRange): Promise<Financia
   return {
     youtubeTotal,
     sponsorTotal,
+    otherIncomeTotal,
+    expensesTotal,
+    netTotal: overallTotal - expensesTotal,
     sponsorForecastTotal,
     sponsorActualPct,
     overallTotal,
@@ -539,10 +554,7 @@ export async function getRecentCollaborationPayments(
     return {
       id: r.id,
       date: new Date(r.paid_at + "T12:00:00").toLocaleDateString("it-IT"),
-      amount: new Intl.NumberFormat("it-IT", {
-        style: "currency",
-        currency: "EUR",
-      }).format(Number(r.amount ?? 0)),
+      amount: formatEur(Number(r.amount ?? 0)),
       collaboration: c
         ? b
           ? `${c} · ${b}`
@@ -551,4 +563,20 @@ export async function getRecentCollaborationPayments(
       note: r.note,
     };
   });
+}
+
+export type CollaborationOption = { id: string; label: string };
+
+/** Elenco compatto per le select (titolo · brand), più recenti prima. */
+export async function getCollaborationOptions(): Promise<CollaborationOption[]> {
+  const [supabase, userId] = await Promise.all([createSupabaseClient(), requireUserId()]);
+  const { data } = await supabase
+    .from("collaborations")
+    .select("id, brief_text, brands ( name )")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as CollabRow[]).map((c) => ({
+    id: c.id,
+    label: `${c.brief_text?.trim() || "Senza titolo"} · ${brandName(c.brands)}`,
+  }));
 }

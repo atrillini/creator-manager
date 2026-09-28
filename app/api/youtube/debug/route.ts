@@ -1,7 +1,10 @@
+import { requireApiAdmin } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { getYoutubeDebugDiagnostics } from "@/lib/youtube";
 
 export async function GET() {
+  const auth = await requireApiAdmin();
+  if (!auth.ok) return auth.response;
   try {
     const diagnostics = await getYoutubeDebugDiagnostics();
     return NextResponse.json({ ok: true, diagnostics });

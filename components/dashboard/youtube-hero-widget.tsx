@@ -3,7 +3,9 @@
 import { Button } from "@/components/ui/button";
 import type { YoutubeStatsRow } from "@/lib/data/fetchers";
 import { Loader2, RefreshCcw } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import Image from "next/image";
+import { useState, useTransition } from "react";
+import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
 
 type Props = { initial: YoutubeStatsRow | null };
 
@@ -20,24 +22,7 @@ export function YouTubeHeroWidget({ initial }: Props) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (pending) {
-      const startedAt = Date.now();
-      setElapsedMs(0);
-      tickRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - startedAt);
-      }, 250);
-    } else {
-      if (tickRef.current) clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [pending]);
+  const elapsedSeconds = useElapsedSeconds(pending);
 
   const onSync = () => {
     setSyncError(null);
@@ -77,8 +62,6 @@ export function YouTubeHeroWidget({ initial }: Props) {
     });
   };
 
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
-
   return (
     <section
       aria-busy={pending}
@@ -87,11 +70,13 @@ export function YouTubeHeroWidget({ initial }: Props) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {stats?.avatarUrl ? (
-            <img
+            <Image
               src={`/api/youtube/avatar?url=${encodeURIComponent(stats.avatarUrl)}`}
               alt={stats.channelName}
+              width={56}
+              height={56}
+              unoptimized
               className="size-14 rounded-full object-cover ring-1 ring-gray-100"
-              referrerPolicy="no-referrer"
             />
           ) : (
             <div className="size-14 rounded-full bg-gray-100" />

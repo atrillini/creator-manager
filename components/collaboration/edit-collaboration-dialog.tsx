@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEur } from "@/lib/format";
 import { updateCollaboration } from "@/lib/actions/collaboration-update";
 import { COLLAB_STATUS_OPTIONS } from "@/lib/collab-statuses";
 import {
@@ -30,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Gift, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import type { BrandOption } from "@/components/collaborazioni/create-collaboration-dialog";
 
 function pickDefaultBrandId(list: BrandOption[], current: string) {
@@ -38,12 +39,9 @@ function pickDefaultBrandId(list: BrandOption[], current: string) {
   return list[0]?.id ?? "";
 }
 
-function formatEur(n: number) {
+function formatFeeTotal(n: number) {
   if (!Number.isFinite(n) || n < 0) return "—";
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(n);
+  return formatEur(n);
 }
 
 type Props = {
@@ -81,21 +79,24 @@ export function EditCollaborationDialog({
   );
   const formId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    setErr(null);
-    setBrandId(pickDefaultBrandId(brands, data.brand?.id ?? ""));
-    setStatus(data.status);
-    setBrief(data.brief_text ?? "");
-    setContractUrl(data.contract_url ?? "");
-    setIsPeriodic(data.is_periodic);
-    setContentCount(data.content_count ?? 1);
-    setFeePerContent(numberToItalianInput(data.fee_per_content_value));
-    setAgreedFee(numberToItalianInput(data.agreed_fee_value));
-    setIsGiveaway(data.is_giveaway);
-    setGiveawayDetails(data.giveaway_details ?? "");
-    setGiveawayValue(numberToItalianInput(data.giveaway_value_amount));
-  }, [open, data, brands]);
+  const [prevOpen, setPrevOpen] = useState(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setErr(null);
+      setBrandId(pickDefaultBrandId(brands, data.brand?.id ?? ""));
+      setStatus(data.status);
+      setBrief(data.brief_text ?? "");
+      setContractUrl(data.contract_url ?? "");
+      setIsPeriodic(data.is_periodic);
+      setContentCount(data.content_count ?? 1);
+      setFeePerContent(numberToItalianInput(data.fee_per_content_value));
+      setAgreedFee(numberToItalianInput(data.agreed_fee_value));
+      setIsGiveaway(data.is_giveaway);
+      setGiveawayDetails(data.giveaway_details ?? "");
+      setGiveawayValue(numberToItalianInput(data.giveaway_value_amount));
+    }
+  }
 
   const periodicTotal = useMemo(() => {
     if (!isPeriodic) return 0;
@@ -302,7 +303,7 @@ export function EditCollaborationDialog({
                 >
                   <p className="text-xs font-medium text-gray-500">Totale contrattuale</p>
                   <p className="text-lg font-semibold tabular-nums text-gray-900">
-                    {periodicTotal > 0 ? formatEur(periodicTotal) : "—"}
+                    {periodicTotal > 0 ? formatFeeTotal(periodicTotal) : "—"}
                   </p>
                 </div>
               </div>

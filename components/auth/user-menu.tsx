@@ -17,6 +17,7 @@ export function UserMenu({ email: emailProp }: Props) {
   const [busy, setBusy] = useState(false);
   const [signupEnabled, setSignupEnabled] = useState(true);
   const [envEnabled, setEnvEnabled] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const initials = useMemo(() => {
     const raw = (email ?? "Utente").split("@")[0] || "U";
     return raw.slice(0, 2).toUpperCase();
@@ -28,10 +29,13 @@ export function UserMenu({ email: emailProp }: Props) {
       const meData = (await meRes.json()) as {
         ok: boolean;
         email?: string | null;
+        isAdmin?: boolean;
       };
       if (meData.ok) {
         setEmail(meData.email ?? null);
+        setIsAdmin(meData.isAdmin === true);
       }
+      if (!meData.isAdmin) return;
 
       const res = await fetch("/api/auth/signup-settings");
       const data = (await res.json()) as {
@@ -88,22 +92,24 @@ export function UserMenu({ email: emailProp }: Props) {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 border-white/60 bg-white/80 backdrop-blur-md">
         <p className="text-sm font-semibold text-gray-900">{email}</p>
-        <div className="mt-3 rounded-xl border border-gray-200/80 bg-white/70 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium text-gray-700">Registrazione aperta</p>
-              <p className="text-[11px] text-gray-500">
-                {envEnabled ? "Controllata da switch UI" : "Bloccata da AUTH_ALLOW_SIGNUP=false"}
-              </p>
+        {isAdmin ? (
+          <div className="mt-3 rounded-xl border border-gray-200/80 bg-white/70 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-gray-700">Registrazione aperta</p>
+                <p className="text-[11px] text-gray-500">
+                  {envEnabled ? "Controllata da switch UI" : "Bloccata da AUTH_ALLOW_SIGNUP=false"}
+                </p>
+              </div>
+              <Switch
+                checked={signupEnabled}
+                onCheckedChange={onToggleSignup}
+                disabled={busy || !envEnabled}
+                aria-label="Abilita registrazione"
+              />
             </div>
-            <Switch
-              checked={signupEnabled}
-              onCheckedChange={onToggleSignup}
-              disabled={busy || !envEnabled}
-              aria-label="Abilita registrazione"
-            />
           </div>
-        </div>
+        ) : null}
         <Button
           type="button"
           variant="ghost"

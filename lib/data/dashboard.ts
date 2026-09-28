@@ -1,3 +1,4 @@
+import { formatEur, toYmd } from "@/lib/format";
 import { createSupabaseClient, requireUserId } from "@/lib/supabase-server";
 
 const STALE_DAYS = 7;
@@ -38,6 +39,8 @@ export type DashboardMonthPoint = {
   month: string;
   sponsor: number;
   youtube: number;
+  /** "Altra entrata" (affiliazioni ecc.). */
+  other: number;
   total: number;
 };
 
@@ -61,11 +64,6 @@ export type DashboardOverview = {
   topBrands: DashboardTopBrand[];
 };
 
-function toYmd(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
 
 function monthBounds(year: number, monthIndex: number) {
   const start = new Date(year, monthIndex, 1);
@@ -166,7 +164,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       .from("financials")
       .select("type, amount, date")
       .eq("user_id", userId)
-      .eq("type", "Entrata YouTube"),
+      .in("type", ["Entrata YouTube", "Entrata Sponsor", "Altra entrata"]),
   ]);
 
   type CollabRow = {
@@ -281,10 +279,12 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     if (d >= curMonth.start && d <= curMonth.end) earnings += amt;
     if (d >= prevMonth.start && d <= prevMonth.end) earningsPrev += amt;
   }
-  for (const f of (finRes.data ?? []) as {
+  const incomeRows = (finRes.data ?? []) as {
+    type: string;
     amount: number | string;
     date: string;
-  }[]) {
+  }[];
+  for (const f of incomeRows) {
     const amt = num(f.amount);
     if (amt <= 0) continue;
     const d = String(f.date);
@@ -325,9 +325,11 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 
   const sponsorByMonth = new Map<string, number>();
   const youtubeByMonth = new Map<string, number>();
+  const otherByMonth = new Map<string, number>();
   for (const key of last12MonthKeys()) {
     sponsorByMonth.set(key, 0);
     youtubeByMonth.set(key, 0);
+    otherByMonth.set(key, 0);
   }
 
   for (const p of (paymentsRes.data ?? []) as { amount: number | string; paid_at: string }[]) {
@@ -338,22 +340,26 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       sponsorByMonth.set(key, (sponsorByMonth.get(key) ?? 0) + amt);
     }
   }
-  for (const f of (finRes.data ?? []) as {
-    amount: number | string;
-    date: string;
-  }[]) {
+  for (const f of incomeRows) {
     const amt = num(f.amount);
     if (amt <= 0) continue;
     const key = String(f.date).slice(0, 7);
-    if (youtubeByMonth.has(key)) {
-      youtubeByMonth.set(key, (youtubeByMonth.get(key) ?? 0) + amt);
+    const bucket =
+      f.type === "Entrata YouTube"
+        ? youtubeByMonth
+        : f.type === "Entrata Sponsor"
+          ? sponsorByMonth
+          : otherByMonth;
+    if (bucket.has(key)) {
+      bucket.set(key, (bucket.get(key) ?? 0) + amt);
     }
   }
 
   const trend12m: DashboardMonthPoint[] = last12MonthKeys().map((month) => {
     const sponsor = sponsorByMonth.get(month) ?? 0;
     const youtube = youtubeByMonth.get(month) ?? 0;
-    return { month, sponsor, youtube, total: sponsor + youtube };
+    const other = otherByMonth.get(month) ?? 0;
+    return { month, sponsor, youtube, other, total: sponsor + youtube + other };
   });
 
   const brandTotals = new Map<string, { name: string; total: number }>();
@@ -413,11 +419,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 }
 
 export function formatDashboardEur(n: number) {
-  return new Intl.NumberFormat("it-IT", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(n);
+  return formatEur(n, { decimals: 0 });
 }
 
 export function formatDashboardMonthLabel(monthKey: string) {

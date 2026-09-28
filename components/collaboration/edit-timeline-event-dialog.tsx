@@ -5,9 +5,8 @@ import {
   updateCollaborationEvent,
 } from "@/lib/actions/collaboration";
 import { EVENT_TYPE_OPTIONS } from "@/lib/collab-event-types";
-import { COLLAB_FILES_BUCKET, makeCollaborationObjectPath } from "@/lib/storage-constants";
 import type { CollaborationEventRow } from "@/lib/data/collaboration-detail";
-import { supabase } from "@/lib/supabase";
+import { uploadCollaborationFile } from "@/lib/storage-upload";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, Loader2, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import type { EventType } from "@/lib/collab-event-types";
 
 function toLocalInputDateTimeValue(d: Date) {
@@ -62,44 +61,26 @@ export function EditTimelineEventDialog({
   const [eventDesc, setEventDesc] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [removeAttachment, setRemoveAttachment] = useState(false);
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [currentHref, setCurrentHref] = useState<string | null>(null);
 
-  const loadFromEvent = useCallback((ev: CollaborationEventRow) => {
-    setEventType(ev.event_type);
-    setEventAt(
-      toLocalInputDateTimeValue(new Date(ev.event_at || ev.created_at))
-    );
-    setEventDesc(ev.description?.trim() ?? "");
-    setFile(null);
-    setRemoveAttachment(false);
-    setFormError(null);
-    setCurrentUrl(ev.attached_file_url);
-  }, []);
-
-  useEffect(() => {
-    if (open && event) {
-      loadFromEvent(event);
+  const openKey = open && event ? event.id : null;
+  const [prevOpenKey, setPrevOpenKey] = useState<string | null>(null);
+  if (openKey !== prevOpenKey) {
+    setPrevOpenKey(openKey);
+    if (event && openKey) {
+      setEventType(event.event_type);
+      setEventAt(toLocalInputDateTimeValue(new Date(event.event_at || event.created_at)));
+      setEventDesc(event.description?.trim() ?? "");
+      setFile(null);
+      setRemoveAttachment(false);
+      setFormError(null);
+      setCurrentPath(event.attached_file_path);
+      setCurrentUrl(event.attached_file_url);
+      setCurrentHref(event.attachment_href);
     }
-  }, [open, event, loadFromEvent]);
-
-  const uploadToStorage = async (f: File) => {
-    setFormError(null);
-    const objectPath = makeCollaborationObjectPath(collaborationId, f);
-    const { data: up, error: upErr } = await supabase.storage
-      .from(COLLAB_FILES_BUCKET)
-      .upload(objectPath, f, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: f.type || undefined,
-      });
-    if (upErr) {
-      throw new Error(upErr.message);
-    }
-    const { data: pub } = supabase.storage
-      .from(COLLAB_FILES_BUCKET)
-      .getPublicUrl(up.path);
-    return pub.publicUrl;
-  };
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,13 +90,14 @@ export function EditTimelineEventDialog({
       void (async () => {
         setUploading(true);
         try {
-          let fileUrl: string | null;
+          let filePath: string | null = currentPath;
+          let fileUrl: string | null = currentUrl;
           if (file) {
-            fileUrl = await uploadToStorage(file);
-          } else if (removeAttachment) {
+            filePath = await uploadCollaborationFile(collaborationId, file);
             fileUrl = null;
-          } else {
-            fileUrl = currentUrl;
+          } else if (removeAttachment) {
+            filePath = null;
+            fileUrl = null;
           }
           const res = await updateCollaborationEvent(
             collaborationId,
@@ -124,6 +106,7 @@ export function EditTimelineEventDialog({
               eventType,
               description: eventDesc,
               eventAtIso: new Date(eventAt).toISOString(),
+              attachedFilePath: filePath,
               attachedFileUrl: fileUrl,
             }
           );
@@ -229,10 +212,10 @@ export function EditTimelineEventDialog({
               disabled={pending || uploading}
             />
           </div>
-          {currentUrl && !removeAttachment && !file && (
+          {currentHref && !removeAttachment && !file && (
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={currentUrl}
+                href={currentHref}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
