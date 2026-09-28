@@ -22,7 +22,39 @@ export default async function AziendePage() {
         description="Anagrafica brand: dati in Supabase; crea e riutilizza nelle collaborazioni."
         actions={<CreateBrandDialog />}
       />
-      <div className="ui-enter overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+      {/* Telefono: una card per azienda */}
+      <ul className="ui-enter space-y-2 md:hidden">
+        {brands.length === 0 && (
+          <li className="rounded-3xl bg-white py-10 text-center text-sm text-muted-foreground">
+            Nessun brand. Usa &ldquo;Aggiungi azienda&rdquo; per inserirne uno.
+          </li>
+        )}
+        {brands.map((b) => (
+          <li key={b.id} className="rounded-3xl bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{b.name}</p>
+                <p className="text-xs text-gray-500">{b.sector ?? "Settore non indicato"}</p>
+              </div>
+              <EditBrandDialog brand={b} />
+            </div>
+            {b.activeCollaborations.length > 0 ? (
+              <div className="mt-2">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">Attive</p>
+                <BrandCollabPills items={b.activeCollaborations} />
+              </div>
+            ) : null}
+            {b.pastCollaborations.length > 0 ? (
+              <div className="mt-2">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">Passate</p>
+                <BrandCollabPills items={b.pastCollaborations} />
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      <div className="ui-enter overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] max-md:hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-0 border-b border-gray-100/80">

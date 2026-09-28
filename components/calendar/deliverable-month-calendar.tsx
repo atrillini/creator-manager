@@ -1,6 +1,6 @@
 "use client";
 
-import { statusDotClass, statusLabelIt, eventRowClassName } from "@/lib/calendar/deliverable-status";
+import { statusDotClass, statusLabelIt, statusRowSoftClass, eventRowClassName } from "@/lib/calendar/deliverable-status";
 import type { CalendarDeliverableItem } from "@/lib/data/calendar-deliverables";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -139,8 +139,10 @@ export function DeliverableMonthCalendar({ items }: Props) {
         </p>
       )}
 
+      <MonthAgenda year={view.y} month={view.m} byDate={byDate} todayKey={todayKey} />
+
       <div
-        className="grid grid-cols-7 overflow-hidden rounded-2xl border border-white/40 bg-gray-100/20 p-px shadow-inner shadow-white/40"
+        className="hidden grid-cols-7 overflow-hidden rounded-2xl border border-white/40 bg-gray-100/20 p-px shadow-inner shadow-white/40 sm:grid"
         role="grid"
         aria-label="Calendario dei deliverable"
       >
@@ -204,6 +206,74 @@ export function DeliverableMonthCalendar({ items }: Props) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Telefono: elenco dei giorni del mese che hanno contenuti (la griglia a 7 colonne è illeggibile). */
+function MonthAgenda({
+  year,
+  month,
+  byDate,
+  todayKey,
+}: {
+  year: number;
+  month: number;
+  byDate: Map<string, CalendarDeliverableItem[]>;
+  todayKey: string;
+}) {
+  const prefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
+  const days = [...byDate.entries()].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b));
+  return (
+    <div className="sm:hidden">
+      {days.length === 0 ? (
+        <p className="rounded-2xl bg-gray-50/80 px-3 py-6 text-center text-sm text-gray-400">
+          Nessun contenuto in questo mese.
+        </p>
+      ) : (
+        <ol className="space-y-4">
+          {days.map(([key, list]) => {
+            const d = new Date(key + "T12:00:00");
+            const isToday = key === todayKey;
+            const isPast = key < todayKey;
+            return (
+              <li key={key}>
+                <p
+                  className={cn(
+                    "mb-1.5 text-xs font-semibold uppercase tracking-wide",
+                    isToday ? "text-blue-600" : isPast ? "text-gray-400" : "text-gray-500"
+                  )}
+                >
+                  {isToday ? "Oggi · " : ""}
+                  {d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+                </p>
+                <ul className="space-y-1.5">
+                  {list.map((ev) => (
+                    <li key={ev.id}>
+                      <Link
+                        href={`/collaborations/${ev.collaborationId}`}
+                        className={cn(
+                          "flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2 active:brightness-95",
+                          statusRowSoftClass(ev.status)
+                        )}
+                      >
+                        <span className={cn("size-2.5 shrink-0 rounded-full", statusDotClass(ev.status))} aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-gray-900">{ev.brandName}</span>
+                          <span className="block text-xs text-gray-600">
+                            {ev.type} · {statusLabelIt(ev.status)}
+                          </span>
+                        </span>
+                        {ev.contentUrl ? <ExternalLink className="size-4 shrink-0 text-gray-400" aria-label="Pubblicato" /> : null}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </div>
   );
 }

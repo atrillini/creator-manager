@@ -222,3 +222,46 @@
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Mobile / PWA
+ * ------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+}
+
+/* iOS zooma la pagina se un campo ha testo sotto i 16px: su telefono tutti i campi a 16px. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Su touch: niente sfondo fisso animato (costoso e a scatti su iOS). */
+@media (hover: none) {
+  body {
+    background-attachment: scroll;
+  }
+  body::before {
+    animation: none;
+    filter: none;
+  }
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

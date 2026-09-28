@@ -33,13 +33,15 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-4 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-2 fixed top-[50%] left-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-white/50 bg-white/80 p-6 text-gray-900 shadow-[0_8px_40px_rgba(0,0,0,0.1),0_0_0_1px_rgba(255,255,255,0.6)_inset] ring-1 ring-white/20 backdrop-blur-2xl backdrop-saturate-150 duration-200 sm:max-w-md md:max-w-lg rounded-3xl",
-        className
+        className,
+        // Telefono: pannello dal basso a tutta larghezza, scorrevole, sopra l'home indicator.
+        "max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:rounded-b-none max-sm:rounded-t-3xl max-sm:bg-white max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       )}
       {...props}
     >
       {children}
       {showClose && (
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
+        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-sm max-sm:top-2.5 max-sm:right-2.5 max-sm:p-2 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
           <X className="h-4 w-4" />
           <span className="sr-only">Chiudi</span>
         </DialogPrimitive.Close>

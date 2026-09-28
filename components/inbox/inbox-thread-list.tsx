@@ -128,8 +128,8 @@ export function InboxThreadList({ items, params, selectedId, tags, searching }: 
                 checked={selected.has(t.id)}
                 onChange={() => toggle(t.id)}
                 className={cn(
-                  "mt-1 size-3.5 shrink-0 accent-gray-900",
-                  selected.size === 0 && "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  "mt-1 size-3.5 shrink-0 accent-gray-900 [@media(pointer:coarse)]:size-5",
+                  selected.size === 0 && "opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100"
                 )}
               />
               <Link href={inboxHref(params, { t: t.id })} className="min-w-0 flex-1" scroll={false}>

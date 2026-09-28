@@ -72,13 +72,13 @@ function DraggableRow({ c, droppableId }: { c: KanbanCollaboration; droppableId:
       <button
         type="button"
         ref={setActivatorNodeRef}
-        className="shrink-0 touch-none self-start rounded p-0.5 text-gray-400 transition-colors hover:bg-white/60 hover:text-blue-500"
+        className="shrink-0 touch-none self-start rounded p-0.5 text-gray-400 transition-colors hover:bg-white/60 hover:text-blue-500 [@media(pointer:coarse)]:p-2"
         title="Trascina in un’altra colonna"
         {...listeners}
         {...attributes}
         aria-label="Trascina su un’altra colonna"
       >
-        <GripVertical className="size-3" />
+        <GripVertical className="size-3 [@media(pointer:coarse)]:size-4" />
       </button>
       <div className="min-w-0 flex-1">
         <Link
@@ -216,9 +216,11 @@ export function CollaborationKanban({ collaborations, showRejected = false }: Pr
       }}
       onDragEnd={onDragEnd}
     >
+      {/* Telefono: colonne affiancate a scorrimento orizzontale (swipe); da tablet in su: griglia. */}
       <div
         className={cn(
-          "grid min-h-0 flex-1 gap-3 md:grid-cols-2",
+          "-mx-4 flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]",
+          "md:mx-0 md:grid md:snap-none md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0",
           showRejected ? "lg:grid-cols-3 xl:grid-cols-5" : "lg:grid-cols-4"
         )}
       >
@@ -235,7 +237,7 @@ export function CollaborationKanban({ collaborations, showRejected = false }: Pr
           return (
             <Card
               key={col.id}
-              className="flex min-h-[320px] flex-col overflow-hidden border-0 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]"
+              className="flex min-h-[320px] w-[84vw] max-w-sm shrink-0 snap-center flex-col overflow-hidden border-0 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] md:w-auto md:max-w-none"
             >
               <CardHeader className="shrink-0 space-y-1 border-b-0 bg-white px-3 py-2 pb-2">
                 <div className="flex items-center justify-between gap-2">
@@ -252,7 +254,7 @@ export function CollaborationKanban({ collaborations, showRejected = false }: Pr
               </CardHeader>
               <CardContent className="min-h-0 flex-1 p-0">
                 <DroppableColumnContent colIdStr={cId}>
-                  <ScrollArea className="h-[min(300px,42vh)]">
+                  <ScrollArea className="h-[min(300px,42vh)] max-md:h-[58dvh]">
                     <ul className="space-y-1.5 px-2 py-0.5 pb-3 pr-1.5">
                       {visibleItems.map((c) => (
                         <li key={c.id} className="w-full min-w-0 max-w-full">

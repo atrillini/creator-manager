@@ -77,6 +77,89 @@ export function ReceiptsTable({ receipts, options }: Props) {
     });
   }
 
+  const renderActions = (r: ReceiptRow) => (
+    <div className="inline-flex items-center">
+      {!r.isLegacy && (
+        <>
+          <IconLink href={`/api/ricevute/${r.id}/pdf`} label="Apri PDF" newTab>
+            <FileText className="size-4" />
+          </IconLink>
+          <IconLink href={`/api/ricevute/${r.id}/pdf?download=1`} label="Scarica PDF">
+            <Download className="size-4" />
+          </IconLink>
+        </>
+      )}
+      {r.status === "emessa" && (
+        <IconButton label="Segna come pagata" onClick={() => setPaying(r)} disabled={pending}>
+          <CheckCircle2 className="size-4" />
+        </IconButton>
+      )}
+      {r.status !== "emessa" && (
+        <IconButton
+          label={r.status === "pagata" ? "Riporta a emessa" : "Ripristina"}
+          disabled={pending}
+          onClick={() => {
+            const msg =
+              r.status === "pagata" && r.paymentId
+                ? "Riportare la ricevuta a 'emessa'? Verrà rimosso anche il pagamento registrato in automatico sulla collaborazione."
+                : "Riportare la ricevuta a 'emessa'?";
+            if (window.confirm(msg)) run(() => reopenReceipt(r.id));
+          }}
+        >
+          <RotateCcw className="size-4" />
+        </IconButton>
+      )}
+      <IconButton label="Modifica" onClick={() => setEditing(r)} disabled={pending}>
+        <Pencil className="size-4" />
+      </IconButton>
+      {r.status === "emessa" && !r.isLegacy && (
+        <IconButton
+          label="Annulla ricevuta"
+          disabled={pending}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Annullare la ricevuta n° ${formatReceiptNumber(r.number, r.year)}? Il numero resta nel registro.`
+              )
+            )
+              run(() => cancelReceipt(r.id));
+          }}
+        >
+          <Ban className="size-4" />
+        </IconButton>
+      )}
+      <IconButton
+        label="Elimina"
+        className="hover:text-red-600"
+        disabled={pending}
+        onClick={() => {
+          if (
+            window.confirm(
+              `Eliminare definitivamente la ricevuta n° ${formatReceiptNumber(r.number, r.year)}? Per le ricevute già inviate è preferibile "Annulla".`
+            )
+          )
+            run(() => deleteReceipt(r.id));
+        }}
+      >
+        <Trash2 className="size-4" />
+      </IconButton>
+    </div>
+  );
+
+  const statusBadges = (r: ReceiptRow) => (
+    <div className="flex flex-wrap items-center gap-1">
+      <Badge variant="muted" className={cn("text-[11px]", STATUS_CLASS[r.status])}>
+        {RECEIPT_STATUS_LABELS[r.status]}
+        {r.status === "pagata" && r.paidAt ? ` · ${dateIt(r.paidAt)}` : ""}
+      </Badge>
+      {r.isLegacy && (
+        <Badge variant="muted" className="bg-gray-100 text-[11px] text-gray-500">
+          Legacy
+        </Badge>
+      )}
+    </div>
+  );
+
   return (
     <div className="ui-enter overflow-hidden rounded-3xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
       {err && (
@@ -84,7 +167,43 @@ export function ReceiptsTable({ receipts, options }: Props) {
           {err}
         </p>
       )}
-      <Table>
+      {/* Telefono: una card per ricevuta */}
+      <ul className="divide-y divide-gray-100 md:hidden">
+        {receipts.length === 0 && (
+          <li className="py-10 text-center text-sm text-gray-400">Nessuna ricevuta per questo anno.</li>
+        )}
+        {receipts.map((r) => (
+          <li key={r.id} className="space-y-2 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{r.recipient.name}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="font-mono text-gray-700">{formatReceiptNumber(r.number, r.year)}</span> ·{" "}
+                  {dateIt(r.issueDate)}
+                  {r.collaborationId ? (
+                    <>
+                      {" · "}
+                      <Link href={`/collaborations/${r.collaborationId}`} className="text-blue-600">
+                        {r.collaborationTitle ?? "Collaborazione"}
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-mono text-sm font-medium text-gray-900">{eur(r.gross)}</p>
+                {r.withholding > 0 ? <p className="font-mono text-xs text-gray-500">netto {eur(r.net)}</p> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {statusBadges(r)}
+              {renderActions(r)}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <Table className="max-md:hidden">
         <TableHeader>
           <TableRow className="border-0 border-b border-gray-100/80">
             <TableHead className="text-gray-500">N°</TableHead>
@@ -132,86 +251,9 @@ export function ReceiptsTable({ receipts, options }: Props) {
               <TableCell className="whitespace-nowrap text-right font-mono text-sm text-gray-500">
                 {r.withholding > 0 ? eur(r.net) : "—"}
               </TableCell>
-              <TableCell className="whitespace-nowrap">
-                <div className="flex items-center gap-1">
-                  <Badge variant="muted" className={cn("text-[11px]", STATUS_CLASS[r.status])}>
-                    {RECEIPT_STATUS_LABELS[r.status]}
-                    {r.status === "pagata" && r.paidAt ? ` · ${dateIt(r.paidAt)}` : ""}
-                  </Badge>
-                  {r.isLegacy && (
-                    <Badge variant="muted" className="bg-gray-100 text-[11px] text-gray-500">
-                      Legacy
-                    </Badge>
-                  )}
-                </div>
-              </TableCell>
+              <TableCell className="whitespace-nowrap">{statusBadges(r)}</TableCell>
               <TableCell className="w-[1%] whitespace-nowrap p-1 text-right">
-                <div className="inline-flex items-center">
-                  {!r.isLegacy && (
-                    <>
-                      <IconLink href={`/api/ricevute/${r.id}/pdf`} label="Apri PDF" newTab>
-                        <FileText className="size-4" />
-                      </IconLink>
-                      <IconLink href={`/api/ricevute/${r.id}/pdf?download=1`} label="Scarica PDF">
-                        <Download className="size-4" />
-                      </IconLink>
-                    </>
-                  )}
-                  {r.status === "emessa" && (
-                    <IconButton label="Segna come pagata" onClick={() => setPaying(r)} disabled={pending}>
-                      <CheckCircle2 className="size-4" />
-                    </IconButton>
-                  )}
-                  {r.status !== "emessa" && (
-                    <IconButton
-                      label={r.status === "pagata" ? "Riporta a emessa" : "Ripristina"}
-                      disabled={pending}
-                      onClick={() => {
-                        const msg =
-                          r.status === "pagata" && r.paymentId
-                            ? "Riportare la ricevuta a 'emessa'? Verrà rimosso anche il pagamento registrato in automatico sulla collaborazione."
-                            : "Riportare la ricevuta a 'emessa'?";
-                        if (window.confirm(msg)) run(() => reopenReceipt(r.id));
-                      }}
-                    >
-                      <RotateCcw className="size-4" />
-                    </IconButton>
-                  )}
-                  <IconButton label="Modifica" onClick={() => setEditing(r)} disabled={pending}>
-                    <Pencil className="size-4" />
-                  </IconButton>
-                  {r.status === "emessa" && !r.isLegacy && (
-                    <IconButton
-                      label="Annulla ricevuta"
-                      disabled={pending}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Annullare la ricevuta n° ${formatReceiptNumber(r.number, r.year)}? Il numero resta nel registro.`
-                          )
-                        )
-                          run(() => cancelReceipt(r.id));
-                      }}
-                    >
-                      <Ban className="size-4" />
-                    </IconButton>
-                  )}
-                  <IconButton
-                    label="Elimina"
-                    className="hover:text-red-600"
-                    disabled={pending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Eliminare definitivamente la ricevuta n° ${formatReceiptNumber(r.number, r.year)}? Per le ricevute già inviate è preferibile "Annulla".`
-                        )
-                      )
-                        run(() => deleteReceipt(r.id));
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                  </IconButton>
-                </div>
+                {renderActions(r)}
               </TableCell>
             </TableRow>
           ))}

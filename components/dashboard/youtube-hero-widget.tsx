@@ -5,6 +5,7 @@ import type { YoutubeStatsRow } from "@/lib/data/fetchers";
 import type { GoogleConnectionStatus } from "@/lib/google-auth";
 import { AlertTriangle, Link2, Loader2, RefreshCcw } from "lucide-react";
 import Image from "next/image";
+import { GoogleConnectLink } from "@/components/google-connect-link";
 import { useState, useTransition } from "react";
 import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
 
@@ -14,8 +15,6 @@ type Props = {
   /** Esito del ritorno da Google (`?google=` nell'URL). */
   oauthResult: string | null;
 };
-
-const CONNECT_HREF = "/api/google/connect?next=/dashboard";
 
 const OAUTH_MESSAGES: Record<string, { text: string; tone: "ok" | "warn" }> = {
   collegato: { text: "Account Google collegato: la sync ora gira anche in automatico ogni giorno.", tone: "ok" },
@@ -112,12 +111,10 @@ export function YouTubeHeroWidget({ initial, google, oauthResult }: Props) {
           </div>
         </div>
         {needsConnect ? (
-          <Button asChild className="gap-1.5 rounded-full text-xs">
-            <a href={CONNECT_HREF}>
-              <Link2 className="size-3.5" />
-              {google.connected ? "Ricollega Google" : "Collega Google"}
-            </a>
-          </Button>
+          <GoogleConnectLink className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gray-900 px-4 text-xs font-medium text-white hover:bg-gray-800">
+            <Link2 className="size-3.5" />
+            {google.connected ? "Ricollega Google" : "Collega Google"}
+          </GoogleConnectLink>
         ) : (
           <Button
             type="button"
@@ -148,9 +145,7 @@ export function YouTubeHeroWidget({ initial, google, oauthResult }: Props) {
       ) : google.legacyEnv ? (
         <p className="mt-3 text-xs text-gray-500">
           Collegato tramite token nelle variabili d&apos;ambiente.{" "}
-          <a href={CONNECT_HREF} className="font-medium text-blue-600 hover:underline">
-            Collega da qui
-          </a>{" "}
+          <GoogleConnectLink className="font-medium text-blue-600 hover:underline">Collega da qui</GoogleConnectLink>{" "}
           per non doverlo più rigenerare a mano.
         </p>
       ) : google.connected ? (
@@ -163,9 +158,7 @@ export function YouTubeHeroWidget({ initial, google, oauthResult }: Props) {
             ? ` · scade il ${new Date(google.expiresAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}`
             : ""}
           {" · "}
-          <a href={CONNECT_HREF} className="font-medium hover:underline">
-            Rinnova
-          </a>
+          <GoogleConnectLink className="font-medium hover:underline">Rinnova</GoogleConnectLink>
         </p>
       ) : null}
       {oauthMessage ? (

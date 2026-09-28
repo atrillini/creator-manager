@@ -17,7 +17,8 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useInboxAccess } from "@/hooks/use-inbox-access";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,7 +33,7 @@ const items = [
 export function AppSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [canAccessInboxItem, setCanAccessInboxItem] = useState(false);
+  const { canAccess: canAccessInboxItem } = useInboxAccess();
 
   // Chiude il menu a ogni cambio pagina.
   const [prevPathname, setPrevPathname] = useState(pathname);
@@ -40,24 +41,6 @@ export function AppSidebar() {
     setPrevPathname(pathname);
     setOpen(false);
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/inbox/access", { cache: "no-store" });
-        const data = (await res.json()) as { ok?: boolean; canAccess?: boolean };
-        if (!cancelled) {
-          setCanAccessInboxItem(Boolean(res.ok && data.canAccess));
-        }
-      } catch {
-        if (!cancelled) setCanAccessInboxItem(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const visibleItems = items.filter((item) => (item.href === "/inbox" ? canAccessInboxItem : true));
 
@@ -67,7 +50,7 @@ export function AppSidebar() {
         type="button"
         size="icon"
         variant="outline"
-        className="fixed left-4 top-4 z-50 border border-gray-200/90 bg-white/90 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur"
+        className="fixed left-4 top-4 z-50 hidden border border-gray-200/90 bg-white/90 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur lg:inline-flex"
         aria-label="Apri menu"
         onClick={() => setOpen((v) => !v)}
       >

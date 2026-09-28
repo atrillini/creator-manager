@@ -139,7 +139,29 @@ export default async function FinanzePage({ searchParams }: PageProps) {
           <p className="text-sm font-medium text-gray-900">Movimenti</p>
           <FinancialMovementDialog collaborations={collaborations} />
         </div>
-        <Table>
+        <ul className="divide-y divide-gray-100 md:hidden">
+          {rows.length === 0 && (
+            <li className="py-6 text-center text-sm text-gray-400">Nessun movimento nel range selezionato.</li>
+          )}
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-gray-900">{r.type}</p>
+                <p className="truncate text-xs text-gray-500">
+                  {r.date}
+                  {r.description || r.collaboration
+                    ? ` · ${[r.description, r.collaboration].filter(Boolean).join(" · ")}`
+                    : ""}
+                </p>
+              </div>
+              <p className="shrink-0 font-mono text-sm font-medium text-gray-900">{r.amount}</p>
+              {r.manual ? (
+                <FinancialMovementDialog collaborations={collaborations} movement={{ id: r.id, ...r.manual }} />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <Table className="max-md:hidden">
           <TableHeader>
             <TableRow className="border-0 border-b border-gray-100/80">
               <TableHead className="text-gray-500">Data</TableHead>
@@ -188,7 +210,26 @@ export default async function FinanzePage({ searchParams }: PageProps) {
         <div className="border-b border-gray-100/80 px-4 py-3">
           <p className="text-sm font-medium text-gray-900">Pagamenti collaborazione (audit)</p>
         </div>
-        <Table>
+        <ul className="divide-y divide-gray-100 md:hidden">
+          {paymentAudit.length === 0 && (
+            <li className="py-6 text-center text-sm text-gray-400">
+              Nessun pagamento collaborazione nel range selezionato.
+            </li>
+          )}
+          {paymentAudit.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-gray-900">{r.collaboration}</p>
+                <p className="truncate text-xs text-gray-500">
+                  {r.date}
+                  {r.note ? ` · ${r.note}` : ""}
+                </p>
+              </div>
+              <p className="shrink-0 font-mono text-sm font-medium text-gray-900">{r.amount}</p>
+            </li>
+          ))}
+        </ul>
+        <Table className="max-md:hidden">
           <TableHeader>
             <TableRow className="border-0 border-b border-gray-100/80">
               <TableHead className="text-gray-500">Data</TableHead>

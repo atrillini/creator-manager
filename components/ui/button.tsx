@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "ui-ease inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "ui-ease inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 [@media(pointer:coarse)]:min-h-10 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -15,13 +15,13 @@ const buttonVariants = cva(
         ghost: "text-gray-600 hover:bg-gray-100/80",
         secondary:
           "bg-gray-100/80 text-gray-900 hover:bg-gray-200/80",
-        link: "rounded-none text-blue-600 underline-offset-4 hover:underline",
+        link: "rounded-none text-blue-600 underline-offset-4 hover:underline [@media(pointer:coarse)]:min-h-0",
       },
       size: {
         default: "h-9 px-4 py-2",
         sm: "h-8 rounded-full px-3 text-xs",
         lg: "h-10 rounded-full px-8",
-        icon: "h-9 w-9 rounded-full",
+        icon: "h-9 w-9 rounded-full [@media(pointer:coarse)]:min-w-10",
       },
     },
     defaultVariants: {

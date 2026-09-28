@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { GoogleConnectLink } from "@/components/google-connect-link";
 import { getGoogleConnectionStatus } from "@/lib/google-auth";
 import { createSupabaseClient } from "@/lib/supabase-server";
 
@@ -25,12 +26,9 @@ export async function GoogleRenewBanner() {
           ? "Il collegamento Google è scaduto: la sync YouTube è ferma."
           : `Il collegamento Google scade ${when ? `${when}` : "a breve"}.`}
       </span>
-      <a
-        href="/api/google/connect?next=/dashboard"
-        className="rounded-full bg-amber-900 px-3 py-1 text-xs font-medium text-white hover:bg-amber-800"
-      >
+      <GoogleConnectLink className="inline-flex min-h-9 items-center rounded-full bg-amber-900 px-4 text-xs font-medium text-white hover:bg-amber-800">
         Rinnova ora
-      </a>
+      </GoogleConnectLink>
     </div>
   );
 }

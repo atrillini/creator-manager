@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -42,8 +44,8 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm transition-colors",
-        active ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"
+        "flex shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm transition-colors lg:px-2.5 lg:py-1.5",
+        active ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-white hover:text-gray-900 lg:bg-transparent"
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -59,11 +61,14 @@ function NavItem({
 
 export function InboxFiltersPanel({ params, view, counts, tags, brands }: Props) {
   const router = useRouter();
+  const [moreOpen, setMoreOpen] = useState(false);
   const reset = { before: null, t: null } as const;
+  const activeExtra = [params.cat, params.brand, params.tag, params.unlinked].filter(Boolean).length;
 
   return (
-    <nav className="space-y-5" aria-label="Filtri inbox">
-      <div className="space-y-0.5">
+    <nav className="space-y-3 lg:space-y-5" aria-label="Filtri inbox">
+      {/* Telefono: viste in una riga scorrevole; desktop: colonna. */}
+      <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:block lg:space-y-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
         {(Object.keys(INBOX_VIEWS) as InboxView[]).map((v) => (
           <NavItem
             key={v}
@@ -73,8 +78,21 @@ export function InboxFiltersPanel({ params, view, counts, tags, brands }: Props)
             count={v === "tutte" ? undefined : counts.views[v]}
           />
         ))}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm lg:hidden",
+            moreOpen || activeExtra ? "bg-gray-900 text-white" : "bg-white text-gray-600"
+          )}
+        >
+          <SlidersHorizontal className="size-3.5" />
+          Filtri{activeExtra ? ` (${activeExtra})` : ""}
+        </button>
       </div>
 
+      <div className={cn("space-y-5 rounded-2xl bg-white/70 p-3 lg:block lg:bg-transparent lg:p-0", !moreOpen && "hidden")}>
       <div className="space-y-0.5">
         <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">Categorie</p>
         {INBOX_CATEGORIES.map((c) => (
@@ -135,6 +153,7 @@ export function InboxFiltersPanel({ params, view, counts, tags, brands }: Props)
           </div>
         </div>
       ) : null}
+      </div>
     </nav>
   );
 }
