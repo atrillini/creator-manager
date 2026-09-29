@@ -106,12 +106,14 @@ function toItem(uid: number, direction: Direction, parsed: ParsedMail, internalD
   };
 }
 
-async function findSentMailbox(client: ImapFlow): Promise<string | null> {
+async function findSpecialMailboxes(client: ImapFlow): Promise<{ sent: string | null; junk: string | null }> {
   const boxes: ListResponse[] = await client.list();
-  const bySpecialUse = boxes.find((b) => b.specialUse === "\\Sent");
-  if (bySpecialUse) return bySpecialUse.path;
-  const byName = boxes.find((b) => /^(sent messages|sent|inviati|posta inviata)$/i.test(b.name));
-  return byName?.path ?? null;
+  const find = (use: string, names: RegExp) =>
+    boxes.find((b) => b.specialUse === use)?.path ?? boxes.find((b) => names.test(b.name))?.path ?? null;
+  return {
+    sent: find("\\Sent", /^(sent messages|sent|inviati|posta inviata)$/i),
+    junk: find("\\Junk", /^(junk|spam|posta indesiderata|indesiderata)$/i),
+  };
 }
 
 type SyncState = { uid_validity: string | null; last_uid: number; backfill_since: string | null };
@@ -221,7 +223,17 @@ async function storeBatch(
   const now = new Date().toISOString();
   // La stessa email può comparire due volte in una cartella (copie, bozze salvate):
   // l'upsert in blocco rifiuta chiavi duplicate, teniamo l'ultima copia.
-  const unique = [...new Map(items.map((it) => [it.messageId, it])).values()];
+  const byId = new Map(items.map((it) => [it.messageId, it]));
+  // Stessa email già salvata da un'altra cartella (es. spostata da Spam a Posta in arrivo): non duplicarla.
+  const { data: elsewhere } = await supabase
+    .from("email_messages")
+    .select("external_message_id")
+    .eq("user_id", userId)
+    .neq("mailbox", mailbox)
+    .in("external_message_id", [...byId.keys()]);
+  for (const r of elsewhere ?? []) byId.delete(String(r.external_message_id));
+  const unique = [...byId.values()];
+  if (!unique.length) return [...new Set(threadOf.values())];
   const rows = unique.map((it) => ({
     user_id: userId,
     provider: "icloud",
@@ -398,8 +410,24 @@ export async function syncInbox(opts: SyncOptions): Promise<InboxSyncResult> {
     inbound = inRes.processed;
     complete = inRes.complete;
 
+    const { sent, junk } = await findSpecialMailboxes(client);
+
+    // Spam: iCloud la svuota dopo 30 giorni, va letta a ogni giro (stesso filtro della posta in arrivo).
+    if (junk && Date.now() < opts.deadline) {
+      try {
+        const junkRes = await syncMailbox(
+          client,
+          { ...opts, mailbox: junk, direction: "in", filter: { or: [{ to: address }, { cc: address }] }, since },
+          touched
+        );
+        inbound += junkRes.processed;
+        complete = complete && junkRes.complete;
+      } catch (err) {
+        errors.push(`Spam: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     if (Date.now() < opts.deadline) {
-      const sent = await findSentMailbox(client);
       if (sent) {
         try {
           const outRes = await syncMailbox(

@@ -210,6 +210,8 @@ export type InboxMessage = {
   bodyText: string;
   hasHtml: boolean;
   attachments: { filename: string; contentType: string; size: number }[];
+  /** Arrivata nella cartella Spam/Posta indesiderata. */
+  fromSpam: boolean;
 };
 
 export type InboxThreadDetail = InboxThreadListItem & {
@@ -232,7 +234,7 @@ export async function getInboxThreadDetail(id: string): Promise<InboxThreadDetai
       .maybeSingle(),
     supabase
       .from("email_messages")
-      .select("id, direction, from_name, from_email, to_emails, subject, received_at, body_text, body_html, attachments")
+      .select("id, mailbox, direction, from_name, from_email, to_emails, subject, received_at, body_text, body_html, attachments")
       .eq("user_id", userId)
       .eq("thread_id", id)
       .order("received_at", { ascending: true }),
@@ -252,6 +254,7 @@ export async function getInboxThreadDetail(id: string): Promise<InboxThreadDetai
     aiModel: row.ai_model,
     messages: ((messagesRes.data ?? []) as {
       id: string;
+      mailbox: string;
       direction: "in" | "out";
       from_name: string | null;
       from_email: string | null;
@@ -272,6 +275,7 @@ export async function getInboxThreadDetail(id: string): Promise<InboxThreadDetai
       bodyText: m.body_text,
       hasHtml: Boolean(m.body_html?.trim()),
       attachments: m.attachments ?? [],
+      fromSpam: /junk|spam|indesiderata/i.test(m.mailbox),
     })),
   };
 }
@@ -320,12 +324,11 @@ export async function getInboxSyncStatus(): Promise<InboxSyncStatus> {
     last_error: string | null;
   }[];
   const inbox = rows.find((r) => r.mailbox === "INBOX");
-  const sent = rows.find((r) => r.mailbox !== "INBOX");
   return {
     lastSuccessAt: inbox?.last_success_at ?? null,
     lastRunAt: rows.map((r) => r.last_run_at).filter(Boolean).sort().at(-1) ?? null,
     lastError: rows.map((r) => r.last_error).find(Boolean) ?? null,
-    backfilling: !inbox?.last_success_at || !sent?.last_success_at,
+    backfilling: rows.length < 2 || rows.some((r) => !r.last_success_at),
     importedUntil: (latest?.received_at as string | undefined) ?? null,
   };
 }

@@ -15,6 +15,10 @@ type Props = {
   actions?: ReactNode;
 };
 
+/**
+ * Telefono: titolo + icone (AI, utente) sulla prima riga, azioni a tutta larghezza sotto.
+ * Da sm in su: titolo | azioni (max 30rem) | icone, su una riga.
+ */
 export function DashboardHeader({
   title,
   description,
@@ -28,11 +32,11 @@ export function DashboardHeader({
   return (
     <div
       className={cn(
-        "mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-start sm:justify-between",
+        "mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 sm:mb-8 sm:grid-cols-[minmax(0,1fr)_auto_auto]",
         className
       )}
     >
-      <div>
+      <div className="col-start-1 row-start-1 min-w-0">
         <h1
           className={cn(
             "text-2xl font-semibold tracking-tight text-gray-900",
@@ -52,8 +56,12 @@ export function DashboardHeader({
           </p>
         )}
       </div>
-      <div className="flex w-full min-w-0 items-start justify-end gap-2 sm:max-w-[30rem] sm:shrink-0">
-        {right ? <div className="w-full min-w-0">{right}</div> : null}
+      {right ? (
+        <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:w-[min(30rem,50vw)]">
+          {right}
+        </div>
+      ) : null}
+      <div className="col-start-2 row-start-1 flex items-start gap-2 sm:col-start-3">
         <AIAssistantDrawer />
         <UserMenu />
       </div>

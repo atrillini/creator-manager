@@ -117,7 +117,7 @@ export function InboxSuggestionsDialog({ brands, links }: Props) {
         type="button"
         size="sm"
         variant="outline"
-        className="h-7 gap-1.5 rounded-full border-violet-200 bg-violet-50 px-2.5 text-xs text-violet-700 hover:bg-violet-100"
+        className="h-auto min-h-7 max-w-full gap-1.5 whitespace-normal rounded-full border-violet-200 bg-violet-50 px-2.5 py-1 text-left text-xs text-violet-700 hover:bg-violet-100"
         onClick={() => {
           setMessage(null);
           setOpen(true);

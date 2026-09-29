@@ -63,7 +63,7 @@ export default async function InboxPage({ searchParams }: PageProps) {
         title="Inbox collaborazioni"
         description="Email per le collaborazioni, scaricate in automatico ogni 15 minuti e catalogate dall'AI."
         end={
-          <div className="flex w-full flex-col items-end gap-2">
+          <div className={cn("flex w-full flex-col items-end gap-2", detail && "max-lg:hidden")}>
             <InboxSearch initialQuery={sp.q ?? ""} params={sp} />
             <div className="flex flex-wrap items-center justify-end gap-2">
               <InboxSuggestionsDialog brands={suggestions.brands} links={suggestions.links} />
@@ -73,8 +73,8 @@ export default async function InboxPage({ searchParams }: PageProps) {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,22rem)_minmax(0,1fr)]">
-        <aside className={cn(detail && "hidden lg:block")}>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,22rem)_minmax(0,1fr)]">
+        <aside className={cn("min-w-0", detail && "hidden lg:block")}>
           <InboxFiltersPanel params={sp} view={view} counts={counts} tags={tags} brands={brands} />
         </aside>
 

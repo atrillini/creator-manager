@@ -113,6 +113,11 @@ function MessageCard({ m, defaultOpen }: { m: InboxMessage; defaultOpen: boolean
             {m.from}
             {m.fromEmail && m.direction === "in" ? <span className="ml-1 font-normal text-gray-400">&lt;{m.fromEmail}&gt;</span> : null}
           </span>
+          {m.fromSpam ? (
+            <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-700">
+              Arrivata nello Spam
+            </span>
+          ) : null}
           {!open ? <span className="block truncate text-xs text-gray-500">{m.bodyText.slice(0, 140)}</span> : null}
         </span>
         <span className="flex shrink-0 items-center gap-1 text-[11px] text-gray-400">
@@ -123,7 +128,7 @@ function MessageCard({ m, defaultOpen }: { m: InboxMessage; defaultOpen: boolean
       </button>
       {open ? (
         <div className="border-t border-gray-100/80 px-4 py-3">
-          {m.to.length ? <p className="mb-2 text-[11px] text-gray-400">A: {m.to.join(", ")}</p> : null}
+          {m.to.length ? <p className="mb-2 break-all text-[11px] text-gray-400">A: {m.to.join(", ")}</p> : null}
           {showHtml ? (
             <>
               <iframe
@@ -193,7 +198,7 @@ export function InboxThreadDetailView({ thread, brands, collaborations }: Props)
       <div className="rounded-3xl bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-snug text-gray-900">{thread.subject}</h2>
+            <h2 className="break-words text-lg font-semibold leading-snug text-gray-900">{thread.subject}</h2>
             <p className="mt-0.5 truncate text-xs text-gray-500">
               {thread.participants.join(", ") || thread.lastFrom} · {thread.messageCount} messagg
               {thread.messageCount === 1 ? "io" : "i"}
