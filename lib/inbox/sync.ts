@@ -400,7 +400,20 @@ export async function syncInbox(opts: SyncOptions): Promise<InboxSyncResult> {
   let outbound = 0;
   let complete = true;
 
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (err) {
+    // Il login fallisce prima di aprire le cartelle: registra l'errore così l'inbox lo mostra.
+    const e = err as { authenticationFailed?: boolean; message?: string };
+    const message = e?.authenticationFailed
+      ? "Login iCloud rifiutato: genera una nuova password per app e aggiorna ICLOUD_APP_PASSWORD su Vercel"
+      : `Connessione iCloud non riuscita: ${e?.message ?? String(err)}`;
+    await saveState(opts.supabase, opts.userId, "INBOX", {
+      last_run_at: new Date().toISOString(),
+      last_error: message,
+    }).catch(() => undefined);
+    throw new Error(message);
+  }
   try {
     const inRes = await syncMailbox(
       client,
